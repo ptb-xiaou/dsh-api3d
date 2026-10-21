@@ -19,11 +19,12 @@ import {
   discoverModels,
   importedModels,
   normalizeModelCatalog,
+  routeOfCatalog,
   routeValue,
   withRelayRoute,
 } from '../lib/index.js'
 import { PI_AI_ENTRY, PROVIDER } from '../lib/site.js'
-import { ROUTE } from '../lib/route.js'
+import { MODEL_TEMPLATE, ROUTE } from '../lib/route.js'
 import { setField } from './harness.mjs'
 
 /** 一个和测试夹具同样口径的设置段：路由声明与公告都关掉。 */
@@ -217,13 +218,10 @@ test('向导写回的目录能被原样读回（能力字段往返）', () => {
   assert.deepEqual(importedModels(config), written)
 })
 
-test('routeValue 未导入时是内置清单，导入后整个 models 被替换', () => {
+test('routeValue 未导入时是 undefined（不声明路由），导入后才铺出 models', () => {
   const config = makeConfig()
-  const builtin = routeValue(config)
-  assert.deepEqual(
-    builtin.models.map((model) => model.id),
-    ROUTE.models.map((model) => model.id),
-  )
+  // 零模型的自定义路由会被 pi-ai 判为配置错误，所以「没导入」只能表达成不声明。
+  assert.equal(routeValue(config), undefined)
 
   setField(config, 'models', JSON.stringify([{ id: 'imported-a', displayName: 'Imported A' }]))
   const imported = routeValue(config)
@@ -232,13 +230,13 @@ test('routeValue 未导入时是内置清单，导入后整个 models 被替换'
     ['imported-a'],
   )
   assert.equal(imported.models[0].name, 'Imported A')
-  // 这条没声明任何能力，所以模板字段照抄内置清单：上下文窗口、最大输出、思考档位
-  // 都还是站点层面那一套（声明了能力的条目会逐条覆盖，见下面的用例）。
-  assert.equal(imported.models[0].contextWindow, ROUTE.models[0].contextWindow)
-  assert.equal(imported.models[0].maxTokens, ROUTE.models[0].maxTokens)
+  // 这条没声明任何能力，所以吃模板：上下文窗口、最大输出、思考档位都还是模板那一套
+  // （声明了能力的条目会逐条覆盖，见下面的用例）。
+  assert.equal(imported.models[0].contextWindow, MODEL_TEMPLATE.contextWindow)
+  assert.equal(imported.models[0].maxTokens, MODEL_TEMPLATE.maxTokens)
   assert.equal(imported.models[0].compat.supportsReasoningEffort, true)
-  // 内置路由本身不被就地改写。
-  assert.ok(ROUTE.models.length > 0)
+  // 模板本身不被就地改写。
+  assert.deepEqual(MODEL_TEMPLATE.input, ['text'])
 })
 
 test('routeValue 逐条落能力：说了的覆盖模板，没说的吃模板，模板不被改写', () => {
@@ -268,24 +266,27 @@ test('routeValue 逐条落能力：说了的覆盖模板，没说的吃模板，
   // 模板里其余字段仍然在：这不是「整条描述符被替换」，只是能力被覆盖。
   assert.equal(vision.compat.supportsReasoningEffort, true)
 
-  assert.deepEqual(plain.input, ROUTE.models[0].input)
-  assert.equal(plain.contextWindow, ROUTE.models[0].contextWindow)
-  assert.equal(plain.maxTokens, ROUTE.models[0].maxTokens)
-  assert.deepEqual(plain.reasoningEfforts, ROUTE.models[0].reasoningEfforts)
+  assert.deepEqual(plain.input, MODEL_TEMPLATE.input)
+  assert.equal(plain.contextWindow, MODEL_TEMPLATE.contextWindow)
+  assert.equal(plain.maxTokens, MODEL_TEMPLATE.maxTokens)
+  assert.deepEqual(plain.reasoningEfforts, MODEL_TEMPLATE.reasoningEfforts)
 
   // 明确声明「非推理模型」要一路传到描述符，而不是回落到模板的档位表。
   assert.equal(noReasoning.reasoningEfforts, false)
 
   // 模板本身没被这批覆盖改坏。
-  assert.equal(ROUTE.models[0].contextWindow === 65536, false)
-  assert.notDeepEqual(ROUTE.models[0].input, ['text', 'image'])
+  assert.equal(MODEL_TEMPLATE.contextWindow === 65536, false)
+  assert.notDeepEqual(MODEL_TEMPLATE.input, ['text', 'image'])
 })
 
 test('withRelayRoute 用传入的路由声明，且不覆盖已有的同名 provider', () => {
-  const custom = { ...ROUTE, displayName: 'Custom', models: [] }
+  const custom = { ...routeOfCatalog([{ id: 'custom-model', displayName: 'Custom Model' }]), displayName: 'Custom' }
   const merged = withRelayRoute({ providers: {} }, custom)
   assert.equal(merged.providers[PROVIDER].displayName, 'Custom')
-  assert.deepEqual(merged.providers[PROVIDER].models, [])
+  assert.deepEqual(
+    merged.providers[PROVIDER].models.map((model) => model.id),
+    ['custom-model'],
+  )
 
   const existing = { providers: { [PROVIDER]: { displayName: 'Mine' } } }
   assert.equal(withRelayRoute(existing, custom), existing)
@@ -411,7 +412,9 @@ test('applyImportedModels 优先用请求体里那份目录（fiber 上的配置
   // 只读它就等于把旧目录写进路由 —— 这正是「导入后模型不出现」的另一半原因。
   const config = makeConfig()
   setField(config, 'models', JSON.stringify([{ id: 'stale-model' }]))
-  const { entry, updates } = makeEntry({ providers: { [PROVIDER]: structuredClone(ROUTE) } })
+  const { entry, updates } = makeEntry({
+    providers: { [PROVIDER]: routeOfCatalog([{ id: 'old-model', displayName: 'Old' }]) },
+  })
   const { ctx } = makeHostCtx({ loader: { entries: () => [entry] } })
 
   const result = await applyImportedModels(ctx, config, [
@@ -540,11 +543,11 @@ test('discoverModels 成功时附带向导每行的初值与词汇表', async ()
     async () => {
       const result = await discoverModels(config, { apiKey: 'sk-test' })
       assert.equal(result.ok, true)
-      // 站点不报能力时，向导要有一份可以改的起点：内置清单那条。
-      assert.deepEqual(result.defaults.input, ROUTE.models[0].input)
-      assert.equal(result.defaults.contextWindow, ROUTE.models[0].contextWindow)
-      assert.equal(result.defaults.maxTokens, ROUTE.models[0].maxTokens)
-      assert.deepEqual(result.defaults.reasoningEfforts, ROUTE.models[0].reasoningEfforts)
+      // 站点不报能力时，向导要有一份可以改的起点：能力模板。
+      assert.deepEqual(result.defaults.input, MODEL_TEMPLATE.input)
+      assert.equal(result.defaults.contextWindow, MODEL_TEMPLATE.contextWindow)
+      assert.equal(result.defaults.maxTokens, MODEL_TEMPLATE.maxTokens)
+      assert.deepEqual(result.defaults.reasoningEfforts, MODEL_TEMPLATE.reasoningEfforts)
       // 词汇表跟着回去，免得浏览器半再抄一份常量。
       assert.deepEqual(result.defaults.levels, ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
       assert.deepEqual(result.defaults.modalities, ['text', 'image'])

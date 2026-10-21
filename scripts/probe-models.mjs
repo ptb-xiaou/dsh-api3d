@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 /**
- * 核对「插件里声明的模型目录」与「站点实际提供的模型目录」是否一致。
+ * 核对「插件设置里导入的模型目录」与「站点实际提供的模型目录」是否一致。
  *
- * 为什么需要这个脚本：手工声明的 pi-ai 路由必须把模型的 id、上下文长度、输出上限
- * 全部写死在 cordis.patch.yml 里。写死的东西会漂 —— 站点下架、改名、换分组，插件
- * 这边不会有任何动静，模型照样出现在选择器里，选中后才 404 model_not_found。
- * 所以清单不能靠猜，只能靠一次真实请求核对。
+ * 为什么需要这个脚本：模型目录来自向导在站点上查到的那份，只读一次就被记下来了。
+ * 之后站点下架、改名、换分组，插件这边不会有任何动静，模型照样出现在选择器里，
+ * 选中后才 404 model_not_found。所以「站点到底在售什么」不能靠记，只能靠一次真实
+ * 请求核对；不一致时回向导重新导入一次即可，不用改文件。
  *
  * 本脚本只发一次只读 GET {baseURL}/models，不发任何补全请求，不写任何文件。
  *
  * 用法：
  *   npm run probe-models
- *   npm run probe-models -- --ref SUB2API_API_KEY
+ *   npm run probe-models -- --profile web
  *   npm run probe-models -- --base https://api3d.cn/v1 --key-env API3D_API_KEY
+ *   npm run probe-models -- --ref SUB2API_API_KEY
  *
  * 凭据解析顺序：
- *   1. 环境变量里以 --key-env 指名的那个（默认 API3D_API_KEY）
+ *   1. 环境变量里以 --key-env 指名的那个（默认取自 lib/route.js 的 apiKeyEnv）
  *   2. --credentials 指向的 YAML（默认 $DSH_HOME/.credentials.yaml，否则 ~/.dsh）里的 refs[--ref]
- *   3. --ref 缺省时，取核对后的 refs 里存在且与站点有关联的那个 —— 不做猜测，直接报错要求显式给
+ *   3. --ref 缺省时不做猜测，直接报错要求显式给
  */
 
 import fs from 'node:fs'
@@ -25,13 +26,13 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import yaml from 'js-yaml'
+import { ROUTE } from '../lib/route.js'
 import { SITE_DEFAULT_BASE_URL } from '../lib/site.js'
 
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const ROOT = path.resolve(HERE, '..')
-const PATCH_FILE = path.join(ROOT, 'cordis.patch.yml')
 
-/** 从 cd 出来的参数表里取一个值，取不到返回 undefined。 */
+/** 从命令行参数表里取一个值，取不到返回 undefined。 */
 function arg(name) {
   const index = process.argv.indexOf(`--${name}`)
   if (index === -1) return undefined
@@ -45,13 +46,33 @@ function resolveHome() {
   return configured.length > 0 ? configured : path.join(os.homedir(), '.dsh')
 }
 
-/** 读补丁层里声明的路由：baseURL（通常是哨兵）与 models。 */
-function readDeclaredRoute() {
-  const patch = yaml.load(fs.readFileSync(PATCH_FILE, 'utf8'))
-  const row = (Array.isArray(patch) ? patch : []).find((entry) => entry?.id === 'llm-pi-ai')
-  const route = row?.config?.providers && Object.values(row.config.providers)[0]
-  if (route === undefined) throw new Error(`${PATCH_FILE} 里找不到 llm-pi-ai.providers.<route>`)
-  return { route, models: Array.isArray(route.models) ? route.models : [] }
+/**
+ * 读插件设置里导入的目录。
+ *
+ * 设置落在 profile 的补丁层（`- id: api3d` → `config.models`，一个 JSON 字符串），
+ * 那是向导唯一的写点；没有这一段就是「还没导入任何模型」。
+ *
+ * @returns {{ models: { id: string, displayName?: string }[], source: string }}
+ */
+function readImportedCatalog() {
+  const profile = arg('profile') ?? 'web'
+  const patchPath = path.join(resolveHome(), 'profiles', profile, 'cordis.patch.yml')
+  if (!fs.existsSync(patchPath)) return { models: [], source: `${patchPath}（不存在）` }
+  const patch = yaml.load(fs.readFileSync(patchPath, 'utf8'))
+  const row = (Array.isArray(patch) ? patch : []).find((entry) => entry?.id === 'api3d')
+  const raw = row?.config?.models
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { models: [], source: `${patchPath}（没有 models，尚未导入）` }
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    const models = (Array.isArray(parsed) ? parsed : [])
+      .map((model) => (typeof model === 'string' ? { id: model } : model))
+      .filter((model) => typeof model?.id === 'string' && model.id.length > 0)
+    return { models, source: `${patchPath}（导入 ${models.length} 个）` }
+  } catch {
+    return { models: [], source: `${patchPath}（models 不是合法 JSON）` }
+  }
 }
 
 /** 解析一把可用于探测的密钥；返回 { key, source }。 */
@@ -89,38 +110,13 @@ function normalizeListing(body) {
     .filter((id) => typeof id === 'string' && id.length > 0)
 }
 
-/** 把一条已声明的模型渲染成可直接粘贴的 YAML（保持原样，只做排版）。 */
-function renderDeclared(model) {
-  const block = yaml.dump(model, { lineWidth: -1, noRefs: true })
-  return block
-    .trimEnd()
-    .split('\n')
-    .map((line) => `          ${line}`)
-    .join('\n')
-}
-
-/** 站点新出现、本插件还没声明的模型：给一份带 TODO 的骨架。 */
-function renderSkeleton(id) {
-  return [
-    `          - id: ${id}`,
-    `            name: ${id}`,
-    '            # TODO 容量与输出上限必须按站点文档填，不要照抄别的模型。',
-    '            contextWindow: 128000',
-    '            maxTokens: 8192',
-    '            input:',
-    '              - text',
-    '            # TODO 站点是否接受 reasoning_effort；不接受就整段删掉。',
-    '            compat:',
-    '              supportsReasoningEffort: false',
-  ].join('\n')
-}
-
-const declaredRoute = readDeclaredRoute()
+const imported = readImportedCatalog()
 const baseUrl = (arg('base') ?? SITE_DEFAULT_BASE_URL).replace(/\/+$/, '')
-const { key, source } = resolveKey(declaredRoute.route.apiKeyEnv)
+const { key, source } = resolveKey(arg('key-env') ?? ROUTE.apiKeyEnv)
 
 console.log(`核对 ${baseUrl}/models`)
-console.log(`凭据：${source}（长度 ${key.length}，不打印内容）\n`)
+console.log(`凭据：${source}（长度 ${key.length}，不打印内容）`)
+console.log(`设置里的目录：${imported.source}\n`)
 
 let response
 try {
@@ -155,30 +151,28 @@ if (live === undefined) {
   process.exit(1)
 }
 
-const declaredIds = declaredRoute.models.map((model) => model.id)
-const missing = declaredIds.filter((id) => !live.includes(id))
-const unknown = live.filter((id) => !declaredIds.includes(id))
+const importedIds = imported.models.map((model) => model.id)
+const missing = importedIds.filter((id) => !live.includes(id))
+const missingInPlugin = live.filter((id) => !importedIds.includes(id))
 
 console.log(`站点自报 ${live.length} 个模型：`)
-for (const id of live) console.log(`  ${declaredIds.includes(id) ? '✓' : '+'} ${id}`)
-if (declaredIds.length !== live.length || missing.length > 0) console.log()
+for (const id of live) console.log(`  ${importedIds.includes(id) ? '✓' : '+'} ${id}`)
+console.log()
 
-console.log(`补丁层声明 ${declaredIds.length} 个模型：`)
-for (const id of declaredIds) console.log(`  ${live.includes(id) ? '✓' : '✗'} ${id}`)
+if (importedIds.length === 0) {
+  console.log('本插件还没有导入任何模型 —— 到侧边栏 API3D → 打开配置向导，填 key 后选择要导入的模型。')
+  process.exit(0)
+}
 
-if (missing.length === 0 && unknown.length === 0) {
+console.log(`设置里导入 ${importedIds.length} 个模型：`)
+for (const id of importedIds) console.log(`  ${live.includes(id) ? '✓' : '✗'} ${id}`)
+
+if (missing.length === 0 && missingInPlugin.length === 0) {
   console.log('\n两边一致，无需改动。')
   process.exit(0)
 }
 
 console.log('')
-for (const id of missing) console.log(`⚠ 声明了「${id}」，但站点没有它 —— 选中后会 404 model_not_found。`)
-for (const id of unknown) console.log(`⚠ 站点有「${id}」，但补丁层没声明 —— 它不会出现在模型选择器里。`)
-
-console.log('\n下面是按站点实际列表重排的 models 段（替换 cordis.patch.yml 里同名的 models:）')
-console.log('        models:')
-for (const id of live) {
-  const declared = declaredRoute.models.find((model) => model.id === id)
-  console.log(declared === undefined ? renderSkeleton(id) : renderDeclared(declared))
-}
-console.log('\n改完记得：npm run gen-route && npm test')
+for (const id of missing) console.log(`⚠ 导入过「${id}」，但站点现在没有它 —— 选中后会 404 model_not_found。`)
+for (const id of missingInPlugin) console.log(`⚠ 站点有「${id}」，但没导入 —— 它不会出现在模型选择器里。`)
+console.log('\n回侧边栏 API3D → 打开配置向导，重新查询并导入一次即可（不用改文件、不用重启）。')

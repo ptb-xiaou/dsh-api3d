@@ -29,9 +29,16 @@ request.**
 - **No custom `LlmAdapter`.** Writing a provider adapter means reimplementing the whole
   harness ↔ pi-ai translation layer (the official one is ~1000 lines: context assembly,
   StreamChunk translation, replay state, context-overflow detection). Not worth it for a
-  single site. So the route is **declarative**: one `llm-pi-ai.providers.api3d` entry in
-  `cordis.patch.yml`, reusing the official adapter.
-- **But declarative routes have two traps, and this plugin exists for them** (below).
+  single site. So the route is still **executed by the official adapter** — it is simply not
+  hard-coded in the patch layer: the host half installs one `llm-pi-ai.providers.api3d` into
+  the config that is being resolved.
+- **No "empty route" declaration.** pi-ai rejects a custom route that resolves to no models
+  at all (validation reports *resolves no models; the installed catalog does not describe
+  this route*). So **while nothing has been imported, this plugin declares no provider at
+  all**: no API3D entry appears under Settings → Models, and no API3D group appears in the
+  model picker. The route shows up once the wizard imports a catalog, and the picker follows
+  immediately — no restart.
+- **Runtime assembly has two traps, and this plugin exists for them** (below).
 
 ### Trap 1: the profile patch layer replaces the whole route
 
@@ -42,9 +49,11 @@ so the entire `providers` dictionary is replaced. Any profile that ships its own
 declares.
 
 The host half cannot observe when that happens, so it hooks the resolution:
-`ctx.on('internal/config', …, { global: true })` puts the route back, then
-`ctx.get('loader')` finds the `llm-pi-ai` entry and `entry.update({ config })` writes it
-home.
+`ctx.on('internal/config', …, { global: true })` puts the route carrying the **imported
+catalog** back, then `ctx.get('loader')` finds the `llm-pi-ai` entry and
+`entry.update({ config })` writes it home (there is also one attempt at startup). With no
+imported catalog that whole step is skipped — no route is installed and nobody else's
+same-name route is touched.
 
 > Why not write it once: the host profile's watcher re-reads the patch file seconds after
 > startup and rolls a one-shot write back. It has to be re-applied on every resolution.
@@ -55,9 +64,10 @@ when the value is identical (no needless write, which would otherwise trigger a 
 storm of its own) and replaces the whole route otherwise. There is an easy trap here: the
 **first argument of an `internal/config` listener is the host's resolved `llm-pi-ai` config,
 not this plugin's settings** — the two were once named the same, so every resolution stamped
-the built-in catalog back over the imported one, which showed up as "the models are imported
-but the selector only ever offers the built-in one". The parameter names are now distinct, and
-`claimRelayRoute` no longer returns early just because a same-name route already exists.
+the template's default catalog back over the imported one, which showed up as "the models are
+imported but the selector only ever offers one". The parameter names are now distinct, the
+route to install is always computed from the plugin's settings (`routeValue`), and the claim
+path no longer returns early just because a same-name route already exists.
 
 ### Trap 2: baseURL is resolved per request, but the adapter cannot see this plugin's settings
 
@@ -86,14 +96,13 @@ The fence also carries the outbound compatibility a relay usually needs:
 | Path | Purpose |
 | --- | --- |
 | `lib/site.js` | **single source of identity constants**: package name, row id, provider name, sentinel host, default credential reference. Change this first when moving to another site |
-| `cordis.patch.yml` | bundle patch layer: declares the `api3d` route and inserts the plugin row. **The model catalog is hand-written here** |
+| `cordis.patch.yml` | bundle patch layer: **inserts the plugin row only** (`- insert:`). The route is not declared here — see "Design tradeoffs" |
 | `lib/index.js` | host half: fence, route survival, quota annotation, settings namespace |
 | `lib/client.js` | browser half: settings card (base URL, API key, compatibility switches, reserved ops rows), sidebar entry, key/model wizard |
-| `lib/route.js` | **generated** by `npm run gen-route`; `test/route-parity.test.mjs` keeps it from drifting away from the YAML |
+| `lib/route.js` | **hand-written**: `ROUTE` (route skeleton, **no `models`**) and `MODEL_TEMPLATE` (the wizard's per-row capability initial values) |
 | `lib/direct-fetch.js` | direct transport (`node:http`/`node:https`, bypassing the process proxy) |
-| `scripts/gen-route.mjs` | generates `lib/route.js` from `cordis.patch.yml` and checks the sentinel host matches |
-| `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, to verify the site's actual catalog against what is declared |
-| `test/` | 114 assertions, see below |
+| `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, diffed against the catalog **already imported into settings** |
+| `test/` | 118 assertions, see below |
 
 ## Install and distribution
 
@@ -110,8 +119,8 @@ Install into a profile. [中文](README.md)
 not pick it up.
 
 Three facts verified on clean isolated instances through the real install path, twice over —
-once with the tarball produced by `npm pack`, once through the npm channel
-(`add dsh-api3d`; both boots printed the same `api3d: 路由 api3d → …` line):
+once with the tarball produced by `npm pack`, once through the npm channel (`add dsh-api3d`;
+both boots printed the plugin's own `api3d: …` startup line):
 
 1. `add` appends `dsh-api3d` to that profile's `package.json`
    `dsh.profile.bundles` by itself — no hand-editing — and writes `dependencies` too.
@@ -123,8 +132,9 @@ once with the tarball produced by `npm pack`, once through the npm channel
    [Development](#development).
 3. The browser half is picked up as well: the HTML the instance serves lists `dsh-api3d`
    in its module manifest (`url: plugins/??dsh-api3d/client.js&rev=…`, with an `inject`
-   list), and the startup log prints
-   `api3d: 路由 api3d → https://api3d.cn/v1，模型目录 1 个（内置）：deepseek-v4.1-flash`.
+   list). Right after installing, before anything is imported, the startup log prints
+   `api3d: 尚未导入模型 → 暂不声明 api3d 路由`; after an import it prints
+   `api3d: 路由 api3d → https://api3d.cn/v1，模型目录 N 个（从站点导入）：…`.
 
 About the **version compatibility gate**: the plugin manager checks every
 `peerDependencies` entry whose name starts with `@deepseek-ai/dsh` against the running DSH
@@ -140,7 +150,7 @@ upgrade breaks the plugin, please open an issue.
 
 ### Releasing (maintainers)
 
-`lib/` (including the hand-written `lib/client.js` and the generated `lib/route.js`) is a
+`lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
 - **npm**: published as **`dsh-api3d@0.2.2`** (`latest` on the official registry); the
@@ -167,8 +177,7 @@ upgrade breaks the plugin, please open an issue.
   of a live release, not that `+` line.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
-- Before tagging, run `npm test` (114 assertions) and `npm run gen-route` (to confirm the
-  generated file has not drifted).
+- Before tagging, run `npm test` (118 assertions).
 
 ## Key and model wizard
 
@@ -192,16 +201,17 @@ capabilities") button at the end of the row expands a per-model editor:
 | Control | Field it writes into the route descriptor | Initial value |
 | --- | --- | --- |
 | Input: 文本 / 图像 (text / image) | `input` | `text` only |
-| Context (上下文) | `contextWindow` | whatever the built-in entry declares (1,000,000) |
+| Context (上下文) | `contextWindow` | the capability template's value (1,000,000) |
 | Max output (最大输出) | `maxTokens` | same source (384,000) |
-| Reasoning levels: 关闭 / minimal / low / medium / high / xhigh / max | `reasoningEfforts` | the six levels of the built-in entry |
+| Reasoning levels: 关闭 / minimal / low / medium / high / xhigh / max | `reasoningEfforts` | the capability template's six levels (`off` = offer Off but send nothing) |
 
 Capabilities are **per row**: editing one row leaves the others alone and never mutates the
-built-in template. Leaving a number box empty means "use the built-in default".
+capability template (`MODEL_TEMPLATE` in `lib/route.js`). Leaving a number box empty means
+"use the template's value".
 
 One caveat matters here: `api3d.cn`'s `/v1/models` returns only `id` and `display_name` — no
 input modalities, no context window, no reasoning levels. So the initial values come from
-this plugin's built-in defaults, **not from anything the site declared**. Confirm the site
+this plugin's capability template (`MODEL_TEMPLATE`), **not from anything the site declared**. Confirm the site
 really supports image input or an extra level before ticking it, or the upstream will reject
 the request. The legal vocabulary is defined by DSH's `dsh-llm-pi-ai` adapter: modalities are
 only `text` / `image`, levels are only `off` / `minimal` / `low` / `medium` / `high` /
@@ -214,14 +224,14 @@ impersonate each other.
 
 Import does three things: writes the key into `$DSH_HOME/.credentials.yaml`, writes the
 ticked catalog (each entry with its own capabilities) into this plugin's `models` setting,
-and has the host install that catalog back into the `llm-pi-ai` route. The model picker sees
-them immediately, with no restart.
+and has the host install that catalog as the `llm-pi-ai` route. The model picker sees them
+immediately, with no restart — before the first import neither Settings → Models nor the
+picker has an API3D entry at all.
 
-The imported catalog overrides the same-name route declared in `cordis.patch.yml` (this
-plugin's own declaration wins): whenever the resolved `providers` contains `api3d`, the hook
-replaces the whole route with the imported catalog. `/api/api3d.apply` also takes the catalog
-in its **request body** instead of re-reading the plugin setting, so even if that setting has
-not been re-resolved yet, what gets installed is exactly what was just ticked.
+`/api/api3d.apply` takes the catalog in its **request body** instead of re-reading the plugin
+setting, so even if that setting has not been re-resolved yet, what gets installed is exactly
+what was just ticked; the resolution-time hook then overwrites any same-name `api3d` route
+with the same catalog from settings (this plugin's own version wins).
 
 Why the query goes through the host: `api3d.cn`'s `/v1/models` returns no
 `access-control-*` headers at all, so a direct browser request is blocked by the
@@ -253,8 +263,10 @@ input modalities, context window and max output edited):
 ![Editing input modalities, context window, max output and reasoning levels per model](docs/wizard-step2-caps.png)
 
 After importing, restarting the development instance changes the log line from
-`模型目录 1 个（内置）` to `模型目录 1 个（从站点导入）`, which proves the catalog really
-was persisted and read back.
+`尚未导入模型 → 暂不声明 api3d 路由` to `模型目录 N 个（从站点导入）：…`, which proves the
+catalog really was persisted and read back. Without a restart, `/api/api3d.apply` installs
+the route on the spot and the picker already shows it — both paths were verified on a real
+instance.
 
 ## Configuration
 
@@ -263,9 +275,9 @@ After installing, find the plugin on the **Plugins** page and fill in its settin
 | Field | Default | Notes |
 | --- | --- | --- |
 | base URL `baseURL` | `https://api3d.cn/v1` | the site address, already filled in. **Clearing it explicitly is not "use the default": the fence stops rewriting, requests hit the sentinel host and DNS fails** |
-| credential reference `apiKeyEnv` | `API3D_API_KEY` | the **key name** of where the secret is stored, not the secret. Must match `apiKeyEnv` in `cordis.patch.yml` |
+| credential reference `apiKeyEnv` | `API3D_API_KEY` | the **key name** of where the secret is stored, not the secret. Must match `apiKeyEnv` in `lib/route.js` |
 | API key | — | a separate button writes it into `~/.dsh/.credentials.yaml`. Write-only; no read path ever fetches it back |
-| imported catalog `models` | empty = built-in list | the JSON catalog written by the wizard, **not meant to be typed by hand**. Empty means use the one hand-written in `cordis.patch.yml` |
+| imported catalog `models` | empty = no route declared | the JSON catalog written by the wizard, **not meant to be typed by hand**. While empty, neither Settings → Models nor the model picker has an API3D entry; clearing it needs one restart to withdraw an already installed route |
 | User-Agent | empty | empty keeps the harness attribution header (recommended). Fill it only when the site explicitly demands a value |
 | direct policy `directMode` | `auto` | `auto` = connect directly only when the process really has proxy variables set; `always` / `never` are for troubleshooting |
 | fill tool schema | on | adds `required: []` to object nodes of outbound tool schemas |
@@ -278,45 +290,44 @@ them in `cordis.patch.yml` or in a profile patch.
 
 ### Moving to another site
 
-(API3D's address and models are already filled in; read this only when switching site or
+(API3D's address and capabilities are already filled in; read this only when switching site or
 channel.)
 
-The models currently declared come from a real check, not from guessing:
+The catalog is **not in the code**: it comes from what the wizard imported (stored in the
+plugin's `models` setting). The models the site serves, and each one's capabilities (input
+modalities / context / max output / reasoning levels), are written by the wizard;
+`MODEL_TEMPLATE` in `lib/route.js` only provides each row's initial values.
 
-| Model id | Context | Max output | Reasoning tiers |
-| --- | --- | --- | --- |
-| `deepseek-v4.1-flash` | 1,000,000 | 384,000 | off / minimal / low / high / xhigh / max |
-
-Measured on 2026-10-20: `GET https://api3d.cn/v1/models` returns only
-`deepseek-v4.1-flash`, and sending `chat/completions` with the same key confirms it works.
+Measured on 2026-10-20: `GET https://api3d.cn/v1/models` returns `deepseek-v4.1-flash`.
 **`deepseek-v4.1-flash-1017` on api3d.cn belongs to a welfare group and needs a different
 key** (`SUB2API_ONLINE_WELFARE_KEY`); asking for it with the main key returns
 `404 model_not_found`. A different group means different credentials, which should be a
-separate provider route — it must not be merged into the same route's model list.
+separate provider route — it must not be merged into the same route's model list, which is
+why the wizard only lists the models this key can actually use.
 
 Verify before editing the catalog, and do not guess from the vendor name:
 
 ```bash
 npm run probe-models                      # GET {baseURL}/models with $API3D_API_KEY
 npm run probe-models -- --ref SUB2API_API_KEY   # or take a reference from the credential store
+npm run probe-models -- --profile desktop       # pick which profile's imported catalog to read
 ```
 
-The script performs one read-only GET, diffs the site's self-reported ids against what the
-patch layer declares, and prints a `models:` block you can paste. Once the check passes,
-run `npm run gen-route && npm test`.
+The script performs one read-only GET, diffs the site's self-reported ids against the catalog
+**already imported into settings**, and prints what is missing. To change the catalog, use the
+wizard (sidebar API3D → re-pick models) — no file editing.
 
-1. **The `models` list in `cordis.patch.yml`** — replace it with the model ids the site
-   actually serves (`GET {baseURL}/models`). A hand-declared pi-ai route inherits nothing:
-   capacity, reasoning tiers and the `compat` switches all have to be restated.
-   **Without `models`, pi-ai tries automatic discovery against the sentinel host and is
-   guaranteed to fail.**
+1. **The model catalog** — import it through the wizard; it lands in the plugin's `models`
+   setting, capabilities included. The route is assembled by the host half at resolution
+   time, and `ROUTE` in `lib/route.js` keeps only site-independent scaffolding (provider name,
+   sentinel host, `apiKeyEnv`, `api`, `defaultInput`, `compat`).
 2. **The spelling of `reasoningEfforts`** — the key is the tier offered by the picker, the
-   value is the `reasoning_effort` actually sent. `off:` left empty = offer Off and do not
-   send the field. Some sites demand an explicit `none` and reject `off`; fill in what you
-   measure.
+   value is the `reasoning_effort` actually sent. The wizard lays out six levels from
+   `MODEL_TEMPLATE`; `off` = offer Off and send nothing. Some sites demand an explicit `none`
+   and reject `off`; adjust per model in the wizard.
 3. **`lib/site.js`** — only needed if you want to change the sentinel host, the default
-   credential reference or the provider name. Afterwards you must run
-   `npm run gen-route`, otherwise `test/route-parity.test.mjs` fails.
+   credential reference or the provider name. Afterwards just run `npm test`
+   (`route.test.mjs` checks it against `lib/route.js`).
 
 ## Reserved seams: balance / usage / billing / health probe
 
@@ -345,9 +356,8 @@ Two implementation routes:
 ## Development
 
 ```bash
-npm run gen-route     # required after editing cordis.patch.yml
-npm run probe-models  # verify the site's real ids before and after changing the catalog
-npm test              # node --test "test/*.test.mjs"
+npm run probe-models  # diff the site's real ids against the imported catalog
+npm test              # node --test "test/*.test.mjs" (118 assertions)
 ```
 
 Dependencies are **junction-linked to the host's `node_modules`**
@@ -360,11 +370,11 @@ Test coverage:
 
 | File | Coverage |
 | --- | --- |
-| `route.test.mjs` | route survival: re-declared after the patch squeezes it out, state classification |
+| `route.test.mjs` | the patch layer no longer declares a route, `ROUTE` carries no `models`, the `MODEL_TEMPLATE` vocabulary, and the hook's fill / replace / leave-alone-when-empty semantics |
 | `fence.test.mjs` | fence: rewriting, allowlist, pass-through of non-target requests, cleanup restoring only this plugin's fetch |
 | `tool-schema.test.mjs` | `required: []` fill-in and skipping `strict: true` |
 | `silent-retry.test.mjs` | transient-failure classification, backoff, attempt ceiling |
-| `claim.test.mjs` | `entry.update` write-back; the three owners of a same-name route (ours / someone else's / missing); **an imported catalog overriding the patch-layer route**; no write when the value is unchanged |
+| `claim.test.mjs` | `entry.update` write-back; the three owners of a same-name route (ours / someone else's / missing); **an imported catalog overriding a same-name route declared elsewhere**; **no route declared at all while nothing is imported**; no write when the value is unchanged |
 | `direct-transport.test.mjs` | direct transport against a real loopback stand-in: header fidelity, no redirect following, abort tearing down the connection |
 | `integration.test.mjs` | **end to end**: fence + direct transport really deliver the request to a TCP server; the boundaries of 402 quota annotation |
 | `client-bundle.test.mjs` | browser-half loading contract: both halves' settings namespaces must be literally equal, six slots (including the sidebar entry and the `shell.overlay` wizard), dictionaries, the address and `target`/`rel` of the wizard's "get one at api3d.cn" link, and **the form controller keeping `this` when it is provided as prototype methods** (a real-machine crash regression) |
@@ -374,15 +384,16 @@ Test coverage:
 
 - **Single site.** Only one base URL is supported. For several sites use a generic gateway
   provider plugin.
-- **Model catalog: built-in list + wizard import.** By default it uses the one hand-written
-  in `cordis.patch.yml`; the wizard's catalog lives in the plugin's `models` setting (and
-  therefore in the profile patch layer, so it survives a restart), and each entry may carry
-  its own `input` / `contextWindow` / `maxTokens` / `reasoningEfforts`. The adapter's own
-  automatic discovery is still unused — it would discover against the sentinel host and
-  fail; see trap 2.
-- **Capability initial values are this plugin's defaults, not the site's declarations.**
+- **The model catalog comes only from the wizard.** It lives in the plugin's `models` setting
+  (and therefore in the profile patch layer, so it survives a restart), and each entry may
+  carry its own `input` / `contextWindow` / `maxTokens` / `reasoningEfforts`. **While nothing
+  is imported no route is declared at all** — pi-ai does not allow a model-less route — so a
+  freshly installed plugin shows no API3D in the picker; clearing the setting needs one
+  restart to withdraw an already installed route. The adapter's own automatic discovery is
+  still unused — it would discover against the sentinel host and fail; see trap 2.
+- **Capability initial values come from this plugin's template, not the site's declarations.**
   `api3d.cn`'s `/v1/models` reports no capabilities, so the context window, max output and
-  reasoning levels shown in the wizard come from the built-in entry and must be adjusted per
+  reasoning levels shown in the wizard come from `MODEL_TEMPLATE` and must be adjusted per
   model to match what the site really does; ticking something the site does not support is
   rejected upstream.
 - **The key is written by the wizard.** The wizard writes it into `$DSH_HOME/.credentials.yaml`
@@ -406,4 +417,5 @@ still reports MIT without dropping the attribution.
 
 The reference implementation [Luck9Star/dsh-gateway-provider](https://github.com/Luck9Star/dsh-gateway-provider)
 (MIT, Copyright (c) 2026 Luck9Star) provided the "register a provider route at runtime"
-route; this skeleton takes the declarative route instead, for the reasons at the top.
+route; this skeleton assembles its route at runtime too (installed on demand, nothing
+declared while empty), for the reasons at the top.
