@@ -5,7 +5,7 @@
 
 **中文** · [English](README.en.md)
 
-> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.3](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.3](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.3) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
+> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.4](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.4](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.4) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
 
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
 一条 pi-ai 路由，基础地址、API Key、出站兼容开关都在「插件」设置页里填，不用改文件、
@@ -86,7 +86,7 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 | `lib/route.js` | **手写**：`ROUTE`（路由骨架，**不含 `models`**）与 `MODEL_TEMPLATE`（向导每行的能力初值） |
 | `lib/direct-fetch.js` | 直连传输（`node:http`/`node:https`，绕开进程代理） |
 | `scripts/probe-models.mjs` | 用真实 key 打一次 `GET {baseURL}/models`，与**设置里已导入的目录**做 diff |
-| `test/` | 118 项断言，见下 |
+| `test/` | 121 项断言，见下 |
 
 ## 安装与分发
 
@@ -94,9 +94,9 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.3`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.4`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.3.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.4.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
@@ -130,7 +130,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 `lib/`（含手写的 `lib/client.js` 与 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.2.3`**（官方 registry 的 `latest`），registry 记录的
+- **npm**：已发布 **`dsh-api3d@0.2.4`**（官方 registry 的 `latest`），registry 记录的
   `dist.shasum`（`be7986249a…`）与官方 tarball 实际下载并算出的 SHA-1 一致（322110 字节）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图
   （322.1 kB 打包 / 466.1 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
@@ -147,7 +147,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
   SHA-1。另外 `npm publish` 打印 `+ dsh-api3d@x.y.z` 只代表**已受理**（同一句还有
   `being processed`）：packument 会先出现，tarball 在 CDN 上要再过几分钟才 200。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
-- 打标签前跑一遍 `npm test`（118 项）。
+- 打标签前跑一遍 `npm test`（121 项）。
 
 ## 密钥与模型向导
 
@@ -159,6 +159,12 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
    点它在系统浏览器里打开站点注册页（宿主按外链处理，不会在应用内嵌窗口里跑）。
 2. 宿主半拿这把 key 去 `GET {baseURL}/models`，把站点实际在售的模型列出来。
 3. 勾选要用的模型，点「导入所选模型」。
+
+密钥框不会把整串藏起来：失焦时显示成 `api3d-…cdef`（首尾可见、中段打码），点进输入框
+才显示完整值。填过一次之后，框右侧的下拉按钮会列出**最近用过的 5 把密钥**（最新的在最前，
+列表里同样只显示打码形式），选一条即可回填；旁边的「清空历史」把它删掉。历史记在
+`$DSH_HOME/.credentials.yaml` 的 `<apiKeyEnv>_HISTORY`（默认 `API3D_API_KEY_HISTORY`）里，
+与密钥本身同处一个文件。
 
 **第 2 步列出的不只是名字。** 每行都带一条能力摘要（形如
 `输入 文本 · 上下文 1,000,000 · 最大输出 384,000 · 5 档推理`），行尾的「调整能力」可以
@@ -297,7 +303,7 @@ npm run probe-models -- --profile desktop       # 指定读哪个 profile 里已
 
 ```bash
 npm run probe-models  # 核对站点实际提供的 id 与已导入目录的差异
-npm test              # node --test "test/*.test.mjs"（118 项）
+npm test              # node --test "test/*.test.mjs"（121 项）
 ```
 
 依赖是**软链到宿主 `node_modules`** 的（`@deepseek-ai/schemastery` / `js-yaml` /
@@ -316,7 +322,7 @@ registry 装真拷贝。`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 声
 | `claim.test.mjs` | `entry.update` 写回；同名路由的三种归属（本插件 / 别人 / 缺失）；**导入目录压过别处那条同名路由**；**没有导入目录时一条路由都不声明**；值没变就不写 |
 | `direct-transport.test.mjs` | 直连传输打真实 loopback 替身：header 保真、不跟随重定向、abort 切断连接 |
 | `integration.test.mjs` | **端到端**：围栏 + 直连传输真的把请求送到一台 TCP 服务器；402 额度注解的边界 |
-| `client-bundle.test.mjs` | 浏览器半装载契约：两半的设置命名空间必须逐字相等、六个槽位（含侧边栏入口与 `shell.overlay` 向导）、字典、向导第一步「前往 api3d.cn 获取」外链的地址与 `target`/`rel`、**表单控制器以原型方法提供时不能丢 `this`**（真机崩溃回归） |
+| `client-bundle.test.mjs` | 浏览器半装载契约：两半的设置命名空间必须逐字相等、六个槽位（含侧边栏入口与 `shell.overlay` 向导）、字典、向导第一步「前往 api3d.cn 获取」外链的地址与 `target`/`rel`、密钥框打码只藏中间与历史下拉的纯函数边界（`maskKey` / `parseKeyHistory` / `rememberKey`）、**表单控制器以原型方法提供时不能丢 `this`**（真机崩溃回归） |
 | `models.test.mjs` | 向导的宿主半：目录归一（含站点上报的能力字段与「没说就不编造」的边界、能力字段往返）、`discoverModels` 失败分类与 `defaults`、逐模型落能力覆盖（不改模板）、`applyImportedModels` 写回、两条 `/api/api3d.*` 路由的注册与鉴权边界 |
 
 ## 已知限制
@@ -333,6 +339,9 @@ registry 装真拷贝。`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 声
 - **密钥由向导代写。** 向导把这把 key 写进 `$DSH_HOME/.credentials.yaml` 的
   `API3D_API_KEY`；也可以手动在设置卡或「设置 → 模型 → API3D」里填，两条路等价。
   已配置后卡片上才出现「清除密钥」。
+- **密钥与历史都是明文。** 密钥框失焦时显示成 `api3d-…cdef` 只是**界面上的**打码，
+  `$DSH_HOME/.credentials.yaml` 里存的仍是明文（和 DSH 里其它密钥一样）；最近 5 把历史
+  密钥也在同一文件里（`<apiKeyEnv>_HISTORY`），点向导里的「清空历史」才会删掉。
 - **余额 / 用量 / 计费 / 健康探测未接入。** 接缝已就位，见上。
 - **`directMode: never` 在站点 WAF 拦截数据中心出口时会失败**，这是预期行为。
 

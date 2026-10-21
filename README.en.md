@@ -5,7 +5,7 @@
 
 [中文](README.md) · **English**
 
-> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.3](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.3](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.3) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.4](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.4](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.4) ｜ MIT (derivation notes in [NOTICE](NOTICE))
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
@@ -102,7 +102,7 @@ The fence also carries the outbound compatibility a relay usually needs:
 | `lib/route.js` | **hand-written**: `ROUTE` (route skeleton, **no `models`**) and `MODEL_TEMPLATE` (the wizard's per-row capability initial values) |
 | `lib/direct-fetch.js` | direct transport (`node:http`/`node:https`, bypassing the process proxy) |
 | `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, diffed against the catalog **already imported into settings** |
-| `test/` | 118 assertions, see below |
+| `test/` | 121 assertions, see below |
 
 ## Install and distribution
 
@@ -110,9 +110,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.3`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.4`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.3.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.4.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -153,7 +153,7 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.3`** (`latest` on the official registry); the
+- **npm**: published as **`dsh-api3d@0.2.4`** (`latest` on the official registry); the
   `dist.shasum` the registry records (`be7986249a…`) matches the SHA-1 of the official
   tarball downloaded and hashed locally (322110 bytes). `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
@@ -178,7 +178,7 @@ upgrade breaks the plugin, please open an issue.
   appears first and the tarball starts returning 200 from the CDN only a few minutes later.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
-- Before tagging, run `npm test` (118 assertions).
+- Before tagging, run `npm test` (121 assertions).
 
 ## Key and model wizard
 
@@ -194,6 +194,13 @@ automatically the first time the panel is opened and no models have been importe
 2. The host half takes that key to `GET {baseURL}/models` and lists the models the site
    actually serves.
 3. Tick the ones you want and click **导入所选模型** ("import selected models").
+
+The key field never hides the whole value: while it is not focused it reads `api3d-…cdef`
+(first and last characters visible, the middle masked), and focusing it shows the full string.
+Once you have used a key, the dropdown button on the right lists the **last five keys** (newest
+first, also masked) — pick one to fill it back in; the adjacent **清空历史** ("clear history")
+action removes them. The history is stored next to the key itself, in
+`$DSH_HOME/.credentials.yaml` under `<apiKeyEnv>_HISTORY` (by default `API3D_API_KEY_HISTORY`).
 
 **Step 2 lists more than names.** Every row carries a capability summary (shaped like
 `输入 文本 · 上下文 1,000,000 · 最大输出 384,000 · 5 档推理`), and the **调整能力** ("adjust
@@ -358,7 +365,7 @@ Two implementation routes:
 
 ```bash
 npm run probe-models  # diff the site's real ids against the imported catalog
-npm test              # node --test "test/*.test.mjs" (118 assertions)
+npm test              # node --test "test/*.test.mjs" (121 assertions)
 ```
 
 Dependencies are **junction-linked to the host's `node_modules`**
@@ -378,7 +385,7 @@ Test coverage:
 | `claim.test.mjs` | `entry.update` write-back; the three owners of a same-name route (ours / someone else's / missing); **an imported catalog overriding a same-name route declared elsewhere**; **no route declared at all while nothing is imported**; no write when the value is unchanged |
 | `direct-transport.test.mjs` | direct transport against a real loopback stand-in: header fidelity, no redirect following, abort tearing down the connection |
 | `integration.test.mjs` | **end to end**: fence + direct transport really deliver the request to a TCP server; the boundaries of 402 quota annotation |
-| `client-bundle.test.mjs` | browser-half loading contract: both halves' settings namespaces must be literally equal, six slots (including the sidebar entry and the `shell.overlay` wizard), dictionaries, the address and `target`/`rel` of the wizard's "get one at api3d.cn" link, and **the form controller keeping `this` when it is provided as prototype methods** (a real-machine crash regression) |
+| `client-bundle.test.mjs` | browser-half loading contract: both halves' settings namespaces must be literally equal, six slots (including the sidebar entry and the `shell.overlay` wizard), dictionaries, the address and `target`/`rel` of the wizard's "get one at api3d.cn" link, masking that only hides the middle of a key plus the key-history pure functions (`maskKey` / `parseKeyHistory` / `rememberKey`), and **the form controller keeping `this` when it is provided as prototype methods** (a real-machine crash regression) |
 | `models.test.mjs` | the wizard's host half: catalog normalization (including capability fields the site reports, the "absent means do not invent" boundary, and the capability round-trip), `discoverModels` failure classification and `defaults`, per-model capability overrides that leave the template untouched, `applyImportedModels` write-back, registration and auth boundaries of the two `/api/api3d.*` routes |
 
 ## Known limitations
@@ -401,6 +408,10 @@ Test coverage:
   as `API3D_API_KEY`; you can also enter it by hand on the settings card or under
   Settings → Models → API3D, and the two paths are equivalent. The "clear key" button only
   appears once a key is configured.
+- **The key and its history are plaintext.** Rendering `api3d-…cdef` while the field is not
+  focused is masking in the UI only; `$DSH_HOME/.credentials.yaml` holds the readable value,
+  like every other DSH credential. The last five keys live in that same file under
+  `<apiKeyEnv>_HISTORY` and are removed by **clear history**.
 - **Balance / usage / billing / health probe are not wired.** The seams are in place, see
   above.
 - **`directMode: never` fails when the site's WAF blocks data-centre egress.** That is the

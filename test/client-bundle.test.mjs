@@ -49,6 +49,8 @@ function loadClient() {
       SegmentedControl: stub('SegmentedControl'),
       Switch: stub('Switch'),
       Modal: stub('Modal'),
+      Menu: stub('Menu'),
+      IconChevronDownOutlineRegular: stub('IconChevronDownOutlineRegular'),
     },
   }
   const exported = contribution.factory((id) => {
@@ -271,8 +273,7 @@ test('向导挂在 shell.overlay 上，面板首次打开时自动弹出', () =>
   assert.equal(body.children[0][0].children[0], 't:wizardKeyStep')
 })
 
-test('密钥输入框下方给出站点入口，点击在新标签打开 api3d.cn', () => {
-  const { exported } = loadClient()
+test('密钥输入框下方给出站点入口，点击在新标签打开 api3d.cn', () => {  const { exported } = loadClient()
   const { ctx, registrations } = makeClientCtx()
   exported.apply(ctx)
   const bySlot = Object.fromEntries(registrations.map((item) => [item.options.name, item]))
@@ -293,6 +294,60 @@ test('密钥输入框下方给出站点入口，点击在新标签打开 api3d.c
   assert.equal(link.props.rel, 'noopener noreferrer')
   assert.equal(link.props.title, 't:wizardGetKeyTitle')
   assert.equal(link.children[0], 't:wizardGetKey')
+})
+
+test('密钥输入框打码显示首尾，并挂一个历史密钥下拉', () => {
+  const { exported } = loadClient()
+  const { ctx, registrations } = makeClientCtx()
+  exported.apply(ctx)
+  const bySlot = Object.fromEntries(registrations.map((item) => [item.options.name, item]))
+  bySlot['main'].Component({ t: (key) => `t:${key}`, relayForm: fakeForm() })
+  const wizard = bySlot['shell.overlay'].Component({ ctx, t: (key) => `t:${key}` })
+  const keyStep = wizard.children[0].children[0]
+
+  const keyRow = keyStep[3]
+  assert.equal(keyRow.props.className, 'dshA3d_row')
+  const combo = keyRow.children[1]
+  assert.equal(combo.type.displayName, 'Menu')
+  // 弹窗主体是 overflow:hidden 的，就地渲染的下拉会被裁掉，必须挂到 body。
+  assert.equal(combo.props.portal, true)
+  assert.equal(combo.props.open, false)
+  assert.equal(combo.props.listClassName, 'dshA3d_keyMenu')
+
+  const field = combo.props.anchor
+  const input = field.children[0]
+  assert.equal(input.type, 'input')
+  assert.equal(input.props.type, 'text', 'password 会把整串藏起来，这里要露出首尾')
+  assert.equal(input.props.value, '')
+
+  const toggle = field.children[1]
+  assert.equal(toggle.type, 'button')
+  assert.equal(toggle.props.disabled, true, '没有历史时下拉按钮应当不可用')
+  assert.equal(toggle.props['aria-label'], 't:wizardKeyHistory')
+  assert.equal(toggle.props.title, 't:wizardKeyHistoryEmpty')
+})
+
+test('打码只藏中间：长串留首尾，短串不裸露', () => {
+  const { exported } = loadClient()
+  assert.equal(exported.maskKey(''), '')
+  assert.equal(exported.maskKey('   '), '')
+  assert.equal(exported.maskKey('sk-123456'), 'sk…56')
+  const long = 'api3d-e661234567890abcdef'
+  assert.equal(exported.maskKey(long), 'api3d-…cdef')
+  assert.ok(!exported.maskKey(long).includes('1234567890'), '中间那段不该出现在屏幕上')
+})
+
+test('历史密钥去重限量，坏数据当空历史', () => {
+  const { exported } = loadClient()
+  assert.deepEqual(exported.parseKeyHistory(''), [])
+  assert.deepEqual(exported.parseKeyHistory('not json'), [])
+  assert.deepEqual(exported.parseKeyHistory('{"a":1}'), [])
+  assert.deepEqual(exported.parseKeyHistory('["a",1,"","a","b"]'), ['a', 'b'])
+  assert.equal(exported.parseKeyHistory(JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).length, 5)
+  assert.deepEqual(exported.rememberKey(['b', 'a'], 'a'), ['a', 'b'])
+  assert.deepEqual(exported.rememberKey([], '  x  '), ['x'])
+  assert.deepEqual(exported.rememberKey(['a'], ''), ['a'])
+  assert.equal(exported.keyHistoryRefOf('API3D_API_KEY'), 'API3D_API_KEY_HISTORY')
 })
 
 test('向导声明了两条宿主路由的字面量路径', () => {
