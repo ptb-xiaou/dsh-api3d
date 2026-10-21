@@ -127,9 +127,9 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and the generated `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: `npm pack` was checked to contain exactly 10 files — 5 under `lib/` plus
-  `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE` and `package.json`
-  (55.7 kB packed / 157.1 kB unpacked); `test/`, `scripts/` and `docs/` are kept out by
+- **npm**: `npm pack` was checked to contain exactly 11 files — 5 under `lib/` plus
+  `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`, `NOTICE` and `package.json`
+  (56.0 kB packed / 157.8 kB unpacked); `test/`, `scripts/` and `docs/` are kept out by
   the `files` allowlist. After `npm publish`, `add dsh-api3d` works. If the name is taken
   on npm, switch to a scoped name and update the commands in this document.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
@@ -321,8 +321,10 @@ Test coverage:
 MIT. Derived from [aqiu817/dsh-llm-agentrouter](https://github.com/aqiu817/dsh-llm-agentrouter)
 (MIT, Copyright (c) 2026 aqiu817) — the fence, route self-healing, silent retry, direct
 transport and settings-card skeleton come from that project, restructured for the
-single-site case with credential writing and the ops seams added. The original copyright
-notice is kept in `LICENSE`.
+single-site case with credential writing and the ops seams added. `LICENSE` stays the
+standard MIT text (including the original copyright notice) while the derivation and
+reference-implementation notes live in `NOTICE` — that way GitHub's license detection
+still reports MIT without dropping the attribution.
 
 The reference implementation [Luck9Star/dsh-gateway-provider](https://github.com/Luck9Star/dsh-gateway-provider)
 (MIT, Copyright (c) 2026 Luck9Star) provided the "register a provider route at runtime"

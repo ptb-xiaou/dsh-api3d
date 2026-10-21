@@ -111,8 +111,9 @@ tarball 走真实安装路径验过）：
 `lib/`（含手写的 `lib/client.js` 与生成的 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：`npm pack` 已核对只打包 10 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
-  `README.md` + `README.en.md` + `LICENSE` + `package.json`（55.7 kB 打包 / 157.1 kB 解开）；
+- **npm**：`npm pack` 已核对只打包 11 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
+  `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json`
+  （56.0 kB 打包 / 157.8 kB 解开）；
   `test/`、`scripts/`、`docs/` 由 `files` 白名单挡在外面。`npm publish` 后
   `add dsh-api3d` 即可。若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的
   命令同步改掉。
@@ -274,8 +275,9 @@ registry 装真拷贝。`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 声
 
 MIT。衍生自 [aqiu817/dsh-llm-agentrouter](https://github.com/aqiu817/dsh-llm-agentrouter)
 （MIT，Copyright (c) 2026 aqiu817）—— 围栏、路由自愈、静默重试、直连传输与设置卡的
-骨架来自该项目，已按单站场景重构并补充了凭据写入与运维接缝。原始版权声明保留在
-`LICENSE` 中。
+骨架来自该项目，已按单站场景重构并补充了凭据写入与运维接缝。`LICENSE` 保持标准 MIT
+全文（含原始版权声明），衍生与参考实现的说明单独放在 `NOTICE` 里 —— 这样 GitHub 的
+许可证识别能正常标出 MIT，而归属信息也不会丢。
 
 参考实现 [Luck9Star/dsh-gateway-provider](https://github.com/Luck9Star/dsh-gateway-provider)
 （MIT，Copyright (c) 2026 Luck9Star）提供了「运行时注册 provider 路由」的路线，本骨架

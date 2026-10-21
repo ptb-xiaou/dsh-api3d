@@ -3,10 +3,6 @@ MIT License
 Copyright (c) 2026 aqiu817
 Copyright (c) 2026 dsh-llm-relay contributors
 
-本软件衍生自 https://github.com/aqiu817/dsh-llm-agentrouter（MIT，
-Copyright (c) 2026 aqiu817）。围栏、路由自愈、静默重试、直连传输与设置卡的骨架
-来自该项目；按 MIT 条款，上述原始版权声明予以保留。
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
