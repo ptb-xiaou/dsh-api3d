@@ -9,6 +9,7 @@ import test from 'node:test'
 import { Config, apply, claimRelayRoute, relayRouteState, watchRelayRoute, withRelayRoute } from '../lib/index.js'
 import { PROVIDER, ROUTE } from '../lib/route.js'
 import { PI_AI_ENTRY } from '../lib/route.js'
+import { setField } from './harness.mjs'
 
 const PI_AI_ROW = { options: { id: PI_AI_ENTRY.id, name: PI_AI_ENTRY.name, config: { providers: { mine: {} } } } }
 
@@ -66,16 +67,70 @@ test('claimRelayRoute：找不到 llm-pi-ai 条目时报 absent', async () => {
   assert.equal(await claimRelayRoute(ctx), 'absent')
 })
 
-test('claimRelayRoute：路由已经声明时报 declared 且不写条目', async () => {
+test('claimRelayRoute：同名路由已经是本插件那条时报 declared 且不写条目', async () => {
   let writes = 0
   const ctx = makeLoaderCtx({
-    entries: [{ options: { id: PI_AI_ENTRY.id, name: PI_AI_ENTRY.name, config: { providers: { [PROVIDER]: {} } } } }],
+    entries: [
+      {
+        options: {
+          id: PI_AI_ENTRY.id,
+          name: PI_AI_ENTRY.name,
+          config: { providers: { [PROVIDER]: structuredClone(ROUTE) } },
+        },
+      },
+    ],
     update: async () => {
       writes += 1
     },
   })
   assert.equal(await claimRelayRoute(ctx), 'declared')
-  assert.equal(writes, 0)
+  assert.equal(writes, 0, '值一样就不该再写一次条目，那会白白触发一次重解析')
+})
+
+test('claimRelayRoute：同名路由是别人那条时覆盖成本插件那条', async () => {
+  const seen = []
+  const ctx = makeLoaderCtx({
+    entries: [
+      {
+        options: {
+          id: PI_AI_ENTRY.id,
+          name: PI_AI_ENTRY.name,
+          config: { providers: { [PROVIDER]: { displayName: '别人的同名路由', models: [] } } },
+        },
+      },
+    ],
+    update: async (next) => seen.push(next),
+  })
+  assert.equal(await claimRelayRoute(ctx), 'claimed')
+  assert.equal(seen.length, 1)
+  assert.deepEqual(seen[0].config.providers[PROVIDER], ROUTE)
+})
+
+test('claimRelayRoute：导入的目录压过补丁层那条（导入后模型要出现）', async () => {
+  const config = Config({ announce: false })
+  setField(
+    config,
+    'models',
+    JSON.stringify([{ id: 'deepseek-v4.1-flash-1017', displayName: 'DeepSeek V4.1 Flash 1017' }]),
+  )
+  const seen = []
+  const ctx = makeLoaderCtx({
+    entries: [
+      {
+        options: {
+          id: PI_AI_ENTRY.id,
+          name: PI_AI_ENTRY.name,
+          config: { providers: { [PROVIDER]: structuredClone(ROUTE) } },
+        },
+      },
+    ],
+    update: async (next) => seen.push(next),
+  })
+  assert.equal(await claimRelayRoute(ctx, config), 'claimed')
+  assert.deepEqual(
+    seen[0].config.providers[PROVIDER].models.map((model) => model.id),
+    ['deepseek-v4.1-flash-1017'],
+  )
 })
 
 test('claimRelayRoute：路由被挤掉时写回条目', async () => {
@@ -136,12 +191,33 @@ test('watchRelayRoute 只对 llm-pi-ai 条目并回路由', () => {
   assert.equal(listener.call({ entry: { options: { id: PI_AI_ENTRY.id, name: 'someone-else' } } }, wrongName, () => wrongName), wrongName)
 })
 
-test('watchRelayRoute 不动已经带着路由的配置', () => {
+test('watchRelayRoute 不动已经带着本插件那条路由的配置', () => {
   const ctx = makeLoaderCtx()
   watchRelayRoute(ctx)
   const { listener } = ctx.onCalls[0]
-  const config = { providers: { [PROVIDER]: { api: 'openai-responses' } } }
+  const config = { providers: { [PROVIDER]: structuredClone(ROUTE) } }
   assert.equal(listener.call({ entry: { options: PI_AI_ENTRY } }, config, () => config), config)
+})
+
+test('watchRelayRoute 把同名路由换成导入的目录，别的路由原样保留', () => {
+  const config = Config({ announce: false })
+  setField(
+    config,
+    'models',
+    JSON.stringify([{ id: 'deepseek-v4.1-flash-1017', displayName: 'DeepSeek V4.1 Flash 1017' }]),
+  )
+  const ctx = makeLoaderCtx()
+  watchRelayRoute(ctx, config)
+  const { listener } = ctx.onCalls[0]
+  const resolved = { providers: { [PROVIDER]: structuredClone(ROUTE), mine: { displayName: '别人' } } }
+
+  const merged = listener.call({ entry: { options: PI_AI_ENTRY } }, resolved, () => resolved)
+  assert.notEqual(merged, resolved)
+  assert.deepEqual(
+    merged.providers[PROVIDER].models.map((model) => model.id),
+    ['deepseek-v4.1-flash-1017'],
+  )
+  assert.deepEqual(merged.providers.mine, { displayName: '别人' })
 })
 
 test('apply 在 claimRoute 开启时装上解析钩子并试写一次条目', async () => {

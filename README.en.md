@@ -49,6 +49,16 @@ home.
 > Why not write it once: the host profile's watcher re-reads the patch file seconds after
 > startup and rolls a one-shot write back. It has to be re-applied on every resolution.
 
+When it puts the route back it uses **"this plugin's own declaration wins"** semantics
+(`replace`): if the resolved `providers` already contains `api3d`, the hook skips the write
+when the value is identical (no needless write, which would otherwise trigger a resolution
+storm of its own) and replaces the whole route otherwise. There is an easy trap here: the
+**first argument of an `internal/config` listener is the host's resolved `llm-pi-ai` config,
+not this plugin's settings** — the two were once named the same, so every resolution stamped
+the built-in catalog back over the imported one, which showed up as "the models are imported
+but the selector only ever offers the built-in one". The parameter names are now distinct, and
+`claimRelayRoute` no longer returns early just because a same-name route already exists.
+
 ### Trap 2: baseURL is resolved per request, but the adapter cannot see this plugin's settings
 
 Two namespaces. So the route's `baseURL` points at a host that deliberately does not exist
@@ -83,7 +93,7 @@ The fence also carries the outbound compatibility a relay usually needs:
 | `lib/direct-fetch.js` | direct transport (`node:http`/`node:https`, bypassing the process proxy) |
 | `scripts/gen-route.mjs` | generates `lib/route.js` from `cordis.patch.yml` and checks the sentinel host matches |
 | `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, to verify the site's actual catalog against what is declared |
-| `test/` | 109 assertions, see below |
+| `test/` | 114 assertions, see below |
 
 ## Install and distribution
 
@@ -147,7 +157,7 @@ upgrade breaks the plugin, please open an issue.
   taken on npm, switch to a scoped name and update the commands in this document.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
-- Before tagging, run `npm test` (109 assertions) and `npm run gen-route` (to confirm the
+- Before tagging, run `npm test` (114 assertions) and `npm run gen-route` (to confirm the
   generated file has not drifted).
 
 ## Key and model wizard
@@ -196,6 +206,12 @@ Import does three things: writes the key into `$DSH_HOME/.credentials.yaml`, wri
 ticked catalog (each entry with its own capabilities) into this plugin's `models` setting,
 and has the host install that catalog back into the `llm-pi-ai` route. The model picker sees
 them immediately, with no restart.
+
+The imported catalog overrides the same-name route declared in `cordis.patch.yml` (this
+plugin's own declaration wins): whenever the resolved `providers` contains `api3d`, the hook
+replaces the whole route with the imported catalog. `/api/api3d.apply` also takes the catalog
+in its **request body** instead of re-reading the plugin setting, so even if that setting has
+not been re-resolved yet, what gets installed is exactly what was just ticked.
 
 Why the query goes through the host: `api3d.cn`'s `/v1/models` returns no
 `access-control-*` headers at all, so a direct browser request is blocked by the
@@ -338,7 +354,7 @@ Test coverage:
 | `fence.test.mjs` | fence: rewriting, allowlist, pass-through of non-target requests, cleanup restoring only this plugin's fetch |
 | `tool-schema.test.mjs` | `required: []` fill-in and skipping `strict: true` |
 | `silent-retry.test.mjs` | transient-failure classification, backoff, attempt ceiling |
-| `claim.test.mjs` | `entry.update` write-back |
+| `claim.test.mjs` | `entry.update` write-back; the three owners of a same-name route (ours / someone else's / missing); **an imported catalog overriding the patch-layer route**; no write when the value is unchanged |
 | `direct-transport.test.mjs` | direct transport against a real loopback stand-in: header fidelity, no redirect following, abort tearing down the connection |
 | `integration.test.mjs` | **end to end**: fence + direct transport really deliver the request to a TCP server; the boundaries of 402 quota annotation |
 | `client-bundle.test.mjs` | browser-half loading contract: both halves' settings namespaces must be literally equal, six slots (including the sidebar entry and the `shell.overlay` wizard), dictionaries, the address and `target`/`rel` of the wizard's "get one at api3d.cn" link, and **the form controller keeping `this` when it is provided as prototype methods** (a real-machine crash regression) |

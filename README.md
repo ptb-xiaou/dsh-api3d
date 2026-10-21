@@ -41,6 +41,13 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 > 为什么不能只写一次：宿主 profile 的 watcher 会在启动后几秒重读补丁文件，
 > 把一次性写入回滚。必须每次解析都补。
 
+补回去的时候用的是**「本插件自己那条说了算」**的写法（`replace`）：解析出的 `providers`
+里已经有 `api3d` 时，只要它与要写的路由完全一致就跳过（值没变就不写，免得自己触发自己
+的解析风暴），否则整条替换。这里有个很容易踩的坑：`internal/config` 监听器的**第一个参数
+是宿主解析出来的 `llm-pi-ai` 配置，不是本插件的设置** —— 两者曾经同名，结果每次解析都拿
+内置清单把导入的目录盖回去，表现就是「模型导入了，但选择器里永远只有内置那一条」。现在
+两个参数名分开写，并且 `claimRelayRoute` 不再因为「同名路由已存在」而提前返回。
+
 ### 坑二：baseURL 由适配器逐请求解析，但它读不到本插件的设置
 
 两个命名空间。所以路由的 `baseURL` 指向一台**刻意不存在**的主机
@@ -74,7 +81,7 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 | `lib/direct-fetch.js` | 直连传输（`node:http`/`node:https`，绕开进程代理） |
 | `scripts/gen-route.mjs` | 从 `cordis.patch.yml` 生成 `lib/route.js`，并校验哨兵主机一致 |
 | `scripts/probe-models.mjs` | 用真实 key 打一次 `GET {baseURL}/models`，核对站点在售模型与声明是否一致 |
-| `test/` | 109 项断言，见下 |
+| `test/` | 114 项断言，见下 |
 
 ## 安装与分发
 
@@ -126,7 +133,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
   若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的命令同步改掉。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
-- 打标签前跑一遍 `npm test`（109 项）与 `npm run gen-route`（确认生成物不漂移）。
+- 打标签前跑一遍 `npm test`（114 项）与 `npm run gen-route`（确认生成物不漂移）。
 
 ## 密钥与模型向导
 
@@ -163,6 +170,11 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
 
 导入时做三件事：密钥写进 `$DSH_HOME/.credentials.yaml`、勾选的目录（连同各自的能力）写进
 本插件设置 `models`、再由宿主把目录装回 `llm-pi-ai` 路由。模型选择器立刻能看到它们，不用重启。
+
+导入的目录会压过 `cordis.patch.yml` 里那条同名路由（本插件自己的声明说了算）：解析出的
+`providers` 只要有 `api3d`，钩子就把整条换成导入后的目录。`/api/api3d.apply` 也把目录放在
+**请求体**里（而不是回头去读插件设置），所以即使那一刻设置还没重新解析，装回去的也一定是
+刚勾选的那份。
 
 为什么查询要绕到宿主：`api3d.cn` 的 `/v1/models` 不返回任何 `access-control-*`
 头，浏览器直接请求会被跨域预检挡成 403。向导背后的两条宿主路由是：
@@ -287,7 +299,7 @@ registry 装真拷贝。`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 声
 | `fence.test.mjs` | 围栏：改写、白名单、非目标请求原样透传、清理时只还原本插件装的 fetch |
 | `tool-schema.test.mjs` | `required: []` 补齐与 `strict: true` 跳过 |
 | `silent-retry.test.mjs` | 瞬时失败判定、退避、次数上限 |
-| `claim.test.mjs` | `entry.update` 写回 |
+| `claim.test.mjs` | `entry.update` 写回；同名路由的三种归属（本插件 / 别人 / 缺失）；**导入目录压过补丁层那条**；值没变就不写 |
 | `direct-transport.test.mjs` | 直连传输打真实 loopback 替身：header 保真、不跟随重定向、abort 切断连接 |
 | `integration.test.mjs` | **端到端**：围栏 + 直连传输真的把请求送到一台 TCP 服务器；402 额度注解的边界 |
 | `client-bundle.test.mjs` | 浏览器半装载契约：两半的设置命名空间必须逐字相等、六个槽位（含侧边栏入口与 `shell.overlay` 向导）、字典、向导第一步「前往 api3d.cn 获取」外链的地址与 `target`/`rel`、**表单控制器以原型方法提供时不能丢 `this`**（真机崩溃回归） |

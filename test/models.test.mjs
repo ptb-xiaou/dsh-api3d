@@ -289,6 +289,15 @@ test('withRelayRoute 用传入的路由声明，且不覆盖已有的同名 prov
 
   const existing = { providers: { [PROVIDER]: { displayName: 'Mine' } } }
   assert.equal(withRelayRoute(existing, custom), existing)
+
+  // `replace` 是「本插件自己那条路由说了算」的开关：补丁层里那条同名路由会被覆盖。
+  const replaced = withRelayRoute(existing, custom, { replace: true })
+  assert.notEqual(replaced, existing)
+  assert.equal(replaced.providers[PROVIDER].displayName, 'Custom')
+
+  // 值已经一样时仍然不重写，避免每次解析都变成一次条目更新。
+  const declared = { providers: { [PROVIDER]: structuredClone(custom) } }
+  assert.equal(withRelayRoute(declared, custom, { replace: true }), declared)
 })
 
 test('discoverModels 用 Bearer 密钥查站点，返回归一目录与规范化地址', async () => {
@@ -395,6 +404,47 @@ test('applyImportedModels 把导入目录写进 llm-pi-ai 的 providers', async 
     ['m1', 'm2'],
   )
   assert.deepEqual(providers.mine, { displayName: 'Mine' })
+})
+
+test('applyImportedModels 优先用请求体里那份目录（fiber 上的配置还是旧的）', async () => {
+  // 复现向导导入那一刻：设置里刚写进新目录，但插件 fiber 上的 config 仍是上一份，
+  // 只读它就等于把旧目录写进路由 —— 这正是「导入后模型不出现」的另一半原因。
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'stale-model' }]))
+  const { entry, updates } = makeEntry({ providers: { [PROVIDER]: structuredClone(ROUTE) } })
+  const { ctx } = makeHostCtx({ loader: { entries: () => [entry] } })
+
+  const result = await applyImportedModels(ctx, config, [
+    { id: 'fresh-model', displayName: 'Fresh', input: ['text', 'image'] },
+  ])
+  assert.deepEqual(result, { ok: true, models: ['fresh-model'] })
+
+  assert.equal(updates.length, 1)
+  const route = updates[0].config.providers[PROVIDER]
+  assert.deepEqual(
+    route.models.map((model) => model.id),
+    ['fresh-model'],
+  )
+  assert.deepEqual(route.models[0].input, ['text', 'image'])
+})
+
+test('applyImportedModels 在路由已经是同一份时不再写条目', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1' }]))
+  const { entry, updates } = makeEntry({ providers: {} })
+  // 真 loader 写完会把 patch 落到条目自己的 options 上，这里也这么做。
+  entry.update = async (patch) => {
+    updates.push(patch)
+    entry.options.config = patch.config
+  }
+  const { ctx } = makeHostCtx({ loader: { entries: () => [entry] } })
+
+  assert.deepEqual(await applyImportedModels(ctx, config), { ok: true, models: ['m1'] })
+  assert.equal(updates.length, 1)
+
+  // 第二次导入同一份目录：路由值没变，不该再触发一次重解析。
+  assert.deepEqual(await applyImportedModels(ctx, config), { ok: true, models: ['m1'] })
+  assert.equal(updates.length, 1)
 })
 
 test('applyImportedModels 的失败分类：没导入、没 loader、没条目、条目不可合并', async () => {
