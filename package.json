@@ -1,0 +1,78 @@
+{
+  "name": "dsh-api3d",
+  "version": "0.1.0",
+  "description": "把 API3D（api3d.cn）AI API 网关接成 DSH 的一条模型路由：基础地址、API Key 与出站兼容开关都在设置页。API3D (api3d.cn) as a single DeepSeek Harness model route.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "api3d",
+    "relay",
+    "openai-compatible"
+  ],
+  "license": "MIT",
+  "author": "ptb-xiaou",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ptb-xiaou/dsh-api3d.git"
+  },
+  "homepage": "https://github.com/ptb-xiaou/dsh-api3d#readme",
+  "bugs": {
+    "url": "https://github.com/ptb-xiaou/dsh-api3d/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./site": "./lib/site.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md",
+    "README.en.md"
+  ],
+  "scripts": {
+    "gen-route": "node scripts/gen-route.mjs",
+    "probe-models": "node scripts/probe-models.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "js-yaml": "4.1.0",
+    "react": "18.3.1"
+  }
+}

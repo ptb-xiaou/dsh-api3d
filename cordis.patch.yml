@@ -1,0 +1,94 @@
+# dsh-api3d —— 把 API3D（api3d.cn）接成一个 pi-ai provider 路由
+#
+# 本文件是「组合包补丁层」，由 package.json 的 dsh.bundle.patch 指向，叠在
+# dsh-base / dsh-web-app 之上应用，因此下面这条 llm-pi-ai 行会覆盖 dsh-base
+# 挂载的那条「零路由」休眠条目。安装：
+#
+#   dsh plugin --profile <profile> add dsh-api3d
+#
+# 本文件只声明两件事：
+#
+# 1. 一条 pi-ai 路由。协议、模型目录、思考档位都是配置，不是代码。
+# 2. 把本插件的宿主行插进 profile 的插件清单。宿主半（exports["."]）在 DSH
+#    进程内运行，装上「围栏」并维护这条路由的存活。
+#
+# ── 为什么 baseURL 是一个哨兵主机 ──────────────────────────────────────────
+# baseURL 由适配器逐请求解析，但适配器读不到本插件的设置命名空间 —— 两者是两个
+# 不同的命名空间。所以路由指向一台刻意不存在的主机，围栏在出站时把它改写为设置
+# 里的真实地址。`.invalid` 是 RFC 2606 保留顶级域，围栏没装上时请求会以 DNS 失败
+# 大声报错，而不是静默打到某台真实服务器上。
+#
+# 这么绕是为了让「换地址」变成设置页里的一次写入：常量写死在这里的话，换机房就
+# 得改文件、重装、重启。
+#
+# ── 凭据 ────────────────────────────────────────────────────────────────
+# apiKeyEnv 是**凭据引用**，逐请求解析；密钥存在 $DSH_HOME/.credentials.yaml 或
+# 环境变量里，永远不进本文件（本文件会进版本库）。设置页的「API Key」输入框写
+# 的就是这条引用。
+#
+# ⚠️ 不要把密钥挪进 headers：那个 dict 会被适配器的 describe() 原样返回，并被
+#    Models 设置页渲染出来。
+#
+# ── 模型目录 ────────────────────────────────────────────────────────────
+# 手工声明的 pi-ai 路由什么都不继承，容量、思考档位、compat 开关都必须在这里
+# 重述。不写 models 的话 pi-ai 会去哨兵主机做自动发现，必然失败。
+#
+# ⚠️ 这份清单必须与站点实际提供的模型一致，**不能凭厂商名猜**。核实办法：
+#
+#     npm run probe-models            # 用 API3D_API_KEY 打 GET {baseURL}/models
+#
+# 该脚本会把站点自报的 id 与这里声明的做 diff，并打印可直接粘贴的 YAML 片段。
+#
+# 2026-10-20 实测（GET https://api3d.cn/v1/models）：站点只返回
+# `deepseek-v4.1-flash` 一个模型；用该 key 发 chat/completions 也确认可用。
+# 曾经写在这里的 `deepseek-v4.1-flash-1017` 是错的：它属于**另一个分组**（福利组），
+# 用主 key 请求会得到 404 model_not_found。分组不同 = 凭据不同 = 应当是另一条
+# provider 路由，不能塞进同一条路由的模型列表里。
+#
+# reasoningEfforts 的键是模型选择器提供的档位，值是实际发出的 reasoning_effort
+# 拼写。`off:` 留空 = 提供 Off 且不发送该字段。
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      api3d:
+        displayName: API3D
+        apiKeyEnv: API3D_API_KEY
+        api: openai-completions
+        # 哨兵主机：由 lib/index.js 的围栏逐请求改写为设置里的基础地址。
+        baseURL: https://upstream.api3d.invalid/v1
+        defaultInput:
+          - text
+        # 你的站点不是 pi-ai 能识别的厂商端点，不声明的话它会按 OpenAI 本尊来
+        # 处理（用 developer 角色和 max_completion_tokens）。下面这组是「通用
+        # OpenAI Chat Completions 中转站」的安全默认值，按站点实测结果调整。
+        compat:
+          thinkingFormat: openai
+          supportsReasoningEffort: true
+          supportsDeveloperRole: false
+          maxTokensField: max_tokens
+          supportsStore: false
+          supportsStrictMode: true
+          supportsUsageInStreaming: true
+        models:
+          - id: deepseek-v4.1-flash
+            name: DeepSeek V4.1 Flash
+            contextWindow: 1000000
+            maxTokens: 384000
+            input:
+              - text
+            reasoningEfforts:
+              off: null
+              minimal: minimal
+              low: low
+              high: high
+              xhigh: xhigh
+              max: max
+            compat:
+              supportsReasoningEffort: true
+
+# 插件行本身：一个按包名引用的裸插件条目。
+# id 同时是 loader entry id 与设置命名空间，客户端半按同一个字面量注册设置卡。
+- insert:
+    - id: api3d
+      name: 'dsh-api3d'
