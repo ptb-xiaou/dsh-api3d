@@ -130,21 +130,22 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 `lib/`（含手写的 `lib/client.js` 与 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.2.3`**（官方 registry 的 `latest`）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
+- **npm**：已发布 **`dsh-api3d@0.2.3`**（官方 registry 的 `latest`），registry 记录的
+  `dist.shasum`（`be7986249a…`）与官方 tarball 实际下载并算出的 SHA-1 一致（322110 字节）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图
-  （322.2 kB 打包 / 466.3 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
+  （322.1 kB 打包 / 466.1 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
   （`docs/` 从 0.2.1 起进白名单 —— 否则 npm 页面上的 README 截图是断图）。
   发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
   若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的命令同步改掉。
-- **发完必须核对**，而且要用官方 registry 查：
-  `npm view dsh-api3d dist-tags --registry=https://registry.npmjs.org/`
-  （或直接读 `https://registry.npmjs.org/dsh-api3d` 的 JSON）。本机全局 npmrc 把 registry
-  指到了 `registry.npmmirror.com`，镜像同步慢且不全 —— 曾经在 0.2.1 早已上线的情况下
-  `npm view` 还报 `latest: 0.1.1`，差点据此把本文档改错。另外 `npm publish` 打印
-  `+ dsh-api3d@x.y.z` 只代表**已受理**（同一句还有 `being processed`）：packument 会先出现，
-  tarball 在 CDN 上要再过几分钟才 200。判断「真的上线了」看官方 registry 的
-  `dist-tags` 与 `versions` 里的 `dist.shasum`，不看命令行那行 `+`。
+- **发完必须核对**，而且要绕过两层缓存：本机全局 npmrc 把 registry 指到了
+  `registry.npmmirror.com`（镜像同步慢且不全，曾经在 0.2.1 早已上线时 `npm view` 还报
+  `latest: 0.1.1`），而即使加了 `--registry=https://registry.npmjs.org/`，npm 自己也会缓存
+  响应（0.2.3 发布 5 分钟后 `npm view` 仍报 0.2.2）。可靠做法是直接抓 packument JSON：
+  `Invoke-RestMethod https://registry.npmjs.org/dsh-api3d`，看 `versions`、`dist-tags` 与每条
+  `dist.shasum`；再用 `https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-<版本>.tgz` 下载并核对
+  SHA-1。另外 `npm publish` 打印 `+ dsh-api3d@x.y.z` 只代表**已受理**（同一句还有
+  `being processed`）：packument 会先出现，tarball 在 CDN 上要再过几分钟才 200。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
 - 打标签前跑一遍 `npm test`（118 项）。
 

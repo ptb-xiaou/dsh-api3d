@@ -153,27 +153,29 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.3`** (`latest` on the official registry).
-  `npm pack` was checked to contain
+- **npm**: published as **`dsh-api3d@0.2.3`** (`latest` on the official registry); the
+  `dist.shasum` the registry records (`be7986249a…`) matches the SHA-1 of the official
+  tarball downloaded and hashed locally (322110 bytes). `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
   `LICENSE`, `NOTICE`, `package.json` and the four wizard screenshots under `docs/`
-  (322.2 kB packed / 466.3 kB unpacked); `test/` and `scripts/` are kept out by the
+  (322.1 kB packed / 466.1 kB unpacked); `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
   broken on the npm page). Release with a
   token that may publish directly; if the account is required to stage publishes,
   `npm publish` fails with `E_STAGE_REQUIRED` and you need
   `npx npm@11 stage publish` plus `stage approve` (the approval needs 2FA). If the name is
   taken on npm, switch to a scoped name and update the commands in this document.
-- **Always verify after publishing**, and query the official registry:
-  `npm view dsh-api3d dist-tags --registry=https://registry.npmjs.org/` (or read
-  `https://registry.npmjs.org/dsh-api3d` directly). The machine's global npmrc points its
-  registry at `registry.npmmirror.com`, which syncs slowly and incompletely — `npm view`
-  once still reported `latest: 0.1.1` long after 0.2.1 was live, which nearly got this
-  document corrected the wrong way. Also, `npm publish` printing `+ dsh-api3d@x.y.z` only
+- **Always verify after publishing**, and bypass both caches: the machine's global npmrc
+  points its registry at `registry.npmmirror.com` (which syncs slowly and incompletely —
+  `npm view` once still reported `latest: 0.1.1` long after 0.2.1 was live), and even with
+  `--registry=https://registry.npmjs.org/` npm caches responses itself (five minutes after
+  0.2.3 was published, `npm view` still said 0.2.2). The reliable check is to fetch the
+  packument JSON directly — `Invoke-RestMethod https://registry.npmjs.org/dsh-api3d` — and
+  read `versions`, `dist-tags` and each version's `dist.shasum`, then download
+  `https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-<version>.tgz` and compare its SHA-1.
+  Also, `npm publish` printing `+ dsh-api3d@x.y.z` only
   means the publish was **accepted** (the same output says `being processed`): the packument
   appears first and the tarball starts returning 200 from the CDN only a few minutes later.
-  Treat the official registry's `dist-tags` plus the `dist.shasum` of the version as proof
-  of a live release, not that `+` line.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
 - Before tagging, run `npm test` (118 assertions).
