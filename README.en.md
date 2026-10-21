@@ -5,7 +5,7 @@
 
 [中文](README.md) · **English**
 
-> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.1](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.1](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.1) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.2](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.2](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.2) ｜ MIT (derivation notes in [NOTICE](NOTICE))
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
@@ -101,9 +101,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.1`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.2`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.1.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.2.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -111,8 +111,7 @@ not pick it up.
 
 Three facts verified on clean isolated instances through the real install path, twice over —
 once with the tarball produced by `npm pack`, once through the npm channel
-(`add dsh-api3d`, which installed `dsh-api3d ^0.2.0` and printed the same
-`api3d: 路由 api3d → …` line at boot):
+(`add dsh-api3d`; both boots printed the same `api3d: 路由 api3d → …` line):
 
 1. `add` appends `dsh-api3d` to that profile's `package.json`
    `dsh.profile.bundles` by itself — no hand-editing — and writes `dependencies` too.
@@ -144,17 +143,22 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and the generated `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.1`** (`latest`), and the public tarball is
+- **npm**: published as **`dsh-api3d@0.2.2`** (`latest`), and the public tarball is
   SHA512-identical to the local `npm pack` output. `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
   `LICENSE`, `NOTICE`, `package.json` and the four wizard screenshots under `docs/`
-  (≈318 kB packed / ≈453 kB unpacked); `test/` and `scripts/` are kept out by the
+  (320.1 kB packed / 459.7 kB unpacked); `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
   broken on the npm page). Release with a
   token that may publish directly; if the account is required to stage publishes,
   `npm publish` fails with `E_STAGE_REQUIRED` and you need
   `npx npm@11 stage publish` plus `stage approve` (the approval needs 2FA). If the name is
   taken on npm, switch to a scoped name and update the commands in this document.
+- **Always verify after publishing**: `npm view dsh-api3d dist-tags` and
+  `npm view dsh-api3d versions`. A "successful" staged publish does **not** show up in the
+  public registry (only `npm stage list` sees it), so do not treat `stage publish` output as
+  a live release — this repository has already shipped a README claiming a version was
+  published while npm still served an older one.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
 - Before tagging, run `npm test` (114 assertions) and `npm run gen-route` (to confirm the

@@ -5,7 +5,7 @@
 
 **中文** · [English](README.en.md)
 
-> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.1](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.1](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.1) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
+> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.2](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.2](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.2) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
 
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
 一条 pi-ai 路由，基础地址、API Key、出站兼容开关都在「插件」设置页里填，不用改文件、
@@ -89,16 +89,16 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.1`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.2`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.1.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.2.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
 
 三个实测事实（在干净隔离实例上走真实安装路径验过两遍：一次是 `npm pack` 产出的
-tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^0.2.0`，
-启动日志同样打出 `api3d: 路由 api3d → …`）：
+tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打出
+`api3d: 路由 api3d → …`）：
 
 1. `add` 会自动把 `dsh-api3d` 追加进该 profile `package.json` 的
    `dsh.profile.bundles`，不用手工编辑；`dependencies` 一并写入。
@@ -124,14 +124,18 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
 `lib/`（含手写的 `lib/client.js` 与生成的 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.2.1`**（`latest`），公开 tarball 与本地 `npm pack`
+- **npm**：已发布 **`dsh-api3d@0.2.2`**（`latest`），公开 tarball 与本地 `npm pack`
   SHA512 完全一致。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图
-  （约 318 kB 打包 / 约 453 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
+  （320.1 kB 打包 / 459.7 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
   （`docs/` 从 0.2.1 起进白名单 —— 否则 npm 页面上的 README 截图是断图）。
   发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
   若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的命令同步改掉。
+- **发完必须核对**：`npm view dsh-api3d dist-tags` 与 `npm view dsh-api3d versions`。
+  走暂存通道的那次「发布成功」**不会**出现在公开 registry 里（只有 `npm stage list` 看得到），
+  别把 `stage publish` 的输出当成已上线 —— 仓库里就出过一次这种「README 写着已发布、
+  实际 npm 上还停在旧版本」的错。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
 - 打标签前跑一遍 `npm test`（114 项）与 `npm run gen-route`（确认生成物不漂移）。
 
