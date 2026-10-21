@@ -1,5 +1,8 @@
 # dsh-api3d
 
+[![npm](https://img.shields.io/npm/v/dsh-api3d?label=npm)](https://www.npmjs.com/package/dsh-api3d)
+[![license](https://img.shields.io/github/license/ptb-xiaou/dsh-api3d)](https://github.com/ptb-xiaou/dsh-api3d/blob/main/LICENSE)
+
 [中文](README.md) · **English**
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
@@ -86,16 +89,18 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.1.1`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
-| **tarball** | `dsh plugin --profile web add https://github.com/ptb-xiaou/dsh-api3d/releases/download/v0.1.0/dsh-api3d-0.1.0.tgz` | an absolute local `.tgz` path works too |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.1.1.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
 not pick it up.
 
-Three facts verified on a clean instance (`DSH_HOME=E:\DSH\probe-home`) by installing the
-tarball produced by `npm pack` through the real install path:
+Three facts verified on clean isolated instances through the real install path, twice over —
+once with the tarball produced by `npm pack`, once through the npm channel
+(`add dsh-api3d`, which installed `dsh-api3d ^0.1.1` and printed the same
+`api3d: 路由 api3d → …` line at boot):
 
 1. `add` appends `dsh-api3d` to that profile's `package.json`
    `dsh.profile.bundles` by itself — no hand-editing — and writes `dependencies` too.
@@ -127,11 +132,15 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and the generated `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: `npm pack` was checked to contain exactly 11 files — 5 under `lib/` plus
-  `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`, `NOTICE` and `package.json`
-  (56.0 kB packed / 157.8 kB unpacked); `test/`, `scripts/` and `docs/` are kept out by
-  the `files` allowlist. After `npm publish`, `add dsh-api3d` works. If the name is taken
-  on npm, switch to a scoped name and update the commands in this document.
+- **npm**: published as **`dsh-api3d@0.1.1`** (`latest`), and the public tarball is
+  SHA512-identical to the local `npm pack` output. `npm pack` was checked to contain
+  exactly 11 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
+  `LICENSE`, `NOTICE` and `package.json` (56.2 kB packed / 158.2 kB unpacked);
+  `test/`, `scripts/` and `docs/` are kept out by the `files` allowlist. Release with a
+  token that may publish directly; if the account is required to stage publishes,
+  `npm publish` fails with `E_STAGE_REQUIRED` and you need
+  `npx npm@11 stage publish` plus `stage approve` (the approval needs 2FA). If the name is
+  taken on npm, switch to a scoped name and update the commands in this document.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
 - Before tagging, run `npm test` (105 assertions) and `npm run gen-route` (to confirm the

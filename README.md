@@ -1,5 +1,8 @@
 # dsh-api3d
 
+[![npm](https://img.shields.io/npm/v/dsh-api3d?label=npm)](https://www.npmjs.com/package/dsh-api3d)
+[![license](https://img.shields.io/github/license/ptb-xiaou/dsh-api3d)](https://github.com/ptb-xiaou/dsh-api3d/blob/main/LICENSE)
+
 **中文** · [English](README.en.md)
 
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
@@ -77,15 +80,16 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.1.1`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
-| **tarball** | `dsh plugin --profile web add https://github.com/ptb-xiaou/dsh-api3d/releases/download/v0.1.0/dsh-api3d-0.1.0.tgz` | 也接受本地绝对路径的 `.tgz` |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.1.1.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
 
-三个实测事实（在 `DSH_HOME=E:\DSH\probe-home` 的干净实例上，用 `npm pack` 产出的
-tarball 走真实安装路径验过）：
+三个实测事实（在干净隔离实例上走真实安装路径验过两遍：一次是 `npm pack` 产出的
+tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^0.1.1`，
+启动日志同样打出 `api3d: 路由 api3d → …`）：
 
 1. `add` 会自动把 `dsh-api3d` 追加进该 profile `package.json` 的
    `dsh.profile.bundles`，不用手工编辑；`dependencies` 一并写入。
@@ -111,12 +115,13 @@ tarball 走真实安装路径验过）：
 `lib/`（含手写的 `lib/client.js` 与生成的 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：`npm pack` 已核对只打包 11 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
+- **npm**：已发布 **`dsh-api3d@0.1.1`**（`latest`），公开 tarball 与本地 `npm pack`
+  SHA512 完全一致。`npm pack` 核对只打包 11 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json`
-  （56.0 kB 打包 / 157.8 kB 解开）；
-  `test/`、`scripts/`、`docs/` 由 `files` 白名单挡在外面。`npm publish` 后
-  `add dsh-api3d` 即可。若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的
-  命令同步改掉。
+  （56.2 kB 打包 / 158.2 kB 解开）；`test/`、`scripts/`、`docs/` 由 `files` 白名单挡在外面。
+  发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
+  `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
+  若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的命令同步改掉。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
 - 打标签前跑一遍 `npm test`（105 项）与 `npm run gen-route`（确认生成物不漂移）。
 
