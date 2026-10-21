@@ -5,7 +5,7 @@
 
 [中文](README.md) · **English**
 
-> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.2](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.2](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.2) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.3](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.3](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.3) ｜ MIT (derivation notes in [NOTICE](NOTICE))
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
@@ -110,9 +110,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.2`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.3`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.2.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.3.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -153,12 +153,11 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.2`** (`latest` on the official registry); the
-  `dist.shasum` the registry records (`dd2920e1…`) is the one `npm publish` computed for
-  this tree. `npm pack` was checked to contain
+- **npm**: published as **`dsh-api3d@0.2.3`** (`latest` on the official registry).
+  `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
   `LICENSE`, `NOTICE`, `package.json` and the four wizard screenshots under `docs/`
-  (320.1 kB packed / 459.7 kB unpacked); `test/` and `scripts/` are kept out by the
+  (322.2 kB packed / 466.3 kB unpacked); `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
   broken on the npm page). Release with a
   token that may publish directly; if the account is required to stage publishes,
