@@ -154,11 +154,11 @@ upgrade breaks the plugin, please open an issue.
 **committed artifact**, which is why `github:` installs need no build step.
 
 - **npm**: published as **`dsh-api3d@0.2.4`** (`latest` on the official registry); the
-  `dist.shasum` the registry records (`be7986249a…`) matches the SHA-1 of the official
-  tarball downloaded and hashed locally (322110 bytes). `npm pack` was checked to contain
+  `dist.shasum` the registry records (`761bea55c8…`) matches the SHA-1 of the official
+  tarball downloaded and hashed locally (325526 bytes). `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
   `LICENSE`, `NOTICE`, `package.json` and the four wizard screenshots under `docs/`
-  (322.1 kB packed / 466.1 kB unpacked); `test/` and `scripts/` are kept out by the
+  (325.5 kB packed / 477.4 kB unpacked); `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
   broken on the npm page). Release with a
   token that may publish directly; if the account is required to stage publishes,
