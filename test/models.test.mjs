@@ -153,6 +153,70 @@ test('importedModels 读 volatile 设置里那份 JSON 目录，坏数据回落�
   assert.deepEqual(importedModels(config), [])
 })
 
+test('normalizeModelCatalog 保留站点上报的能力，缺字段不编造', () => {
+  const [vision, nested, bare, onlyOff, emptyInput] = normalizeModelCatalog({
+    data: [
+      {
+        id: 'vision-a',
+        display_name: 'Vision A',
+        input_modalities: ['text', 'image', 'audio'],
+        context_length: '1000000',
+        max_output_tokens: 384000,
+        reasoning_efforts: ['off', 'low', 'high'],
+      },
+      {
+        id: 'nested-b',
+        limit: { context: 131072, output: 32768 },
+        top_provider: { max_completion_tokens: 16384 },
+      },
+      { id: 'bare-c' },
+      { id: 'only-off-d', input: ['text'], reasoningEfforts: { off: null } },
+      { id: 'empty-input-e', input: [] },
+    ],
+  })
+
+  // 认不出的模态（audio）被丢掉，字符串数字也认，档位数组按词汇表顺序落成映射。
+  assert.deepEqual(vision, {
+    id: 'vision-a',
+    displayName: 'Vision A',
+    input: ['text', 'image'],
+    contextWindow: 1000000,
+    maxTokens: 384000,
+    reasoningEfforts: { off: null, low: 'low', high: 'high' },
+  })
+  // 嵌套字段名与宿主自己解析 /models 时用的那套一致。
+  assert.deepEqual(nested, {
+    id: 'nested-b',
+    displayName: 'nested-b',
+    contextWindow: 131072,
+    maxTokens: 32768,
+  })
+  // 站点一个能力字段都没报时，条目里就不该有这些键：「没说」与「说了不支持」是两件事。
+  assert.deepEqual(bare, { id: 'bare-c', displayName: 'bare-c' })
+  // 只报 off 等于「非推理模型」，pi-ai 要求这种情况不要造出「有其它档位」的假象。
+  assert.equal(onlyOff.reasoningEfforts, false)
+  // 空的模态声明同样按「没说」处理，而不是按「不支持文本」。
+  assert.equal(emptyInput.input, undefined)
+})
+
+test('向导写回的目录能被原样读回（能力字段往返）', () => {
+  const config = makeConfig()
+  const written = [
+    {
+      id: 'vision-a',
+      displayName: 'Vision A',
+      input: ['text', 'image'],
+      contextWindow: 65536,
+      maxTokens: 8192,
+      reasoningEfforts: { off: null, high: 'high' },
+    },
+    { id: 'plain-b', displayName: 'Plain B', input: ['text'], reasoningEfforts: false },
+  ]
+  setField(config, 'models', JSON.stringify(written))
+  // 浏览器半写进去的形状必须就是宿主半读出来的形状，否则每次重新打开向导能力都会漂移。
+  assert.deepEqual(importedModels(config), written)
+})
+
 test('routeValue 未导入时是内置清单，导入后整个 models 被替换', () => {
   const config = makeConfig()
   const builtin = routeValue(config)
@@ -168,12 +232,53 @@ test('routeValue 未导入时是内置清单，导入后整个 models 被替换'
     ['imported-a'],
   )
   assert.equal(imported.models[0].name, 'Imported A')
-  // 模板字段照抄内置清单：上下文窗口、最大输出、思考档位都是站点层面的属性。
+  // 这条没声明任何能力，所以模板字段照抄内置清单：上下文窗口、最大输出、思考档位
+  // 都还是站点层面那一套（声明了能力的条目会逐条覆盖，见下面的用例）。
   assert.equal(imported.models[0].contextWindow, ROUTE.models[0].contextWindow)
   assert.equal(imported.models[0].maxTokens, ROUTE.models[0].maxTokens)
   assert.equal(imported.models[0].compat.supportsReasoningEffort, true)
   // 内置路由本身不被就地改写。
   assert.ok(ROUTE.models.length > 0)
+})
+
+test('routeValue 逐条落能力：说了的覆盖模板，没说的吃模板，模板不被改写', () => {
+  const config = makeConfig()
+  setField(
+    config,
+    'models',
+    JSON.stringify([
+      {
+        id: 'vision-a',
+        displayName: 'Vision A',
+        input: ['text', 'image'],
+        contextWindow: 65536,
+        maxTokens: 8192,
+        reasoningEfforts: { off: null, high: 'high' },
+      },
+      { id: 'plain-b', displayName: 'Plain B' },
+      { id: 'no-reasoning-c', displayName: 'No Reasoning C', reasoningEfforts: false },
+    ]),
+  )
+  const [vision, plain, noReasoning] = routeValue(config).models
+
+  assert.deepEqual(vision.input, ['text', 'image'])
+  assert.equal(vision.contextWindow, 65536)
+  assert.equal(vision.maxTokens, 8192)
+  assert.deepEqual(vision.reasoningEfforts, { off: null, high: 'high' })
+  // 模板里其余字段仍然在：这不是「整条描述符被替换」，只是能力被覆盖。
+  assert.equal(vision.compat.supportsReasoningEffort, true)
+
+  assert.deepEqual(plain.input, ROUTE.models[0].input)
+  assert.equal(plain.contextWindow, ROUTE.models[0].contextWindow)
+  assert.equal(plain.maxTokens, ROUTE.models[0].maxTokens)
+  assert.deepEqual(plain.reasoningEfforts, ROUTE.models[0].reasoningEfforts)
+
+  // 明确声明「非推理模型」要一路传到描述符，而不是回落到模板的档位表。
+  assert.equal(noReasoning.reasoningEfforts, false)
+
+  // 模板本身没被这批覆盖改坏。
+  assert.equal(ROUTE.models[0].contextWindow === 65536, false)
+  assert.notDeepEqual(ROUTE.models[0].input, ['text', 'image'])
 })
 
 test('withRelayRoute 用传入的路由声明，且不覆盖已有的同名 provider', () => {
@@ -376,4 +481,23 @@ test('apply 在缺少 connection 时只警告，不打断围栏与路由声明',
   apply(ctx, config)
   assert.ok(warnings.some((line) => line.includes('connection')))
   assert.equal(typeof globalThis.fetch, 'function')
+})
+
+test('discoverModels 成功时附带向导每行的初值与词汇表', async () => {
+  const config = makeConfig()
+  await withFetch(
+    () => jsonResponse({ data: [{ id: 'm1' }] }),
+    async () => {
+      const result = await discoverModels(config, { apiKey: 'sk-test' })
+      assert.equal(result.ok, true)
+      // 站点不报能力时，向导要有一份可以改的起点：内置清单那条。
+      assert.deepEqual(result.defaults.input, ROUTE.models[0].input)
+      assert.equal(result.defaults.contextWindow, ROUTE.models[0].contextWindow)
+      assert.equal(result.defaults.maxTokens, ROUTE.models[0].maxTokens)
+      assert.deepEqual(result.defaults.reasoningEfforts, ROUTE.models[0].reasoningEfforts)
+      // 词汇表跟着回去，免得浏览器半再抄一份常量。
+      assert.deepEqual(result.defaults.levels, ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+      assert.deepEqual(result.defaults.modalities, ['text', 'image'])
+    },
+  )
 })

@@ -72,7 +72,7 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 | `lib/direct-fetch.js` | 直连传输（`node:http`/`node:https`，绕开进程代理） |
 | `scripts/gen-route.mjs` | 从 `cordis.patch.yml` 生成 `lib/route.js`，并校验哨兵主机一致 |
 | `scripts/probe-models.mjs` | 用真实 key 打一次 `GET {baseURL}/models`，核对站点在售模型与声明是否一致 |
-| `test/` | 105 项断言，见下 |
+| `test/` | 109 项断言，见下 |
 
 ## 安装与分发
 
@@ -80,15 +80,15 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.1.1`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.0`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.1.1.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.0.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
 
 三个实测事实（在干净隔离实例上走真实安装路径验过两遍：一次是 `npm pack` 产出的
-tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^0.1.1`，
+tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^0.2.0`，
 启动日志同样打出 `api3d: 路由 api3d → …`）：
 
 1. `add` 会自动把 `dsh-api3d` 追加进该 profile `package.json` 的
@@ -115,15 +115,15 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
 `lib/`（含手写的 `lib/client.js` 与生成的 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.1.1`**（`latest`），公开 tarball 与本地 `npm pack`
+- **npm**：已发布 **`dsh-api3d@0.2.0`**（`latest`），公开 tarball 与本地 `npm pack`
   SHA512 完全一致。`npm pack` 核对只打包 11 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json`
-  （56.2 kB 打包 / 158.2 kB 解开）；`test/`、`scripts/`、`docs/` 由 `files` 白名单挡在外面。
+  （65.9 kB 打包 / 187.7 kB 解开）；`test/`、`scripts/`、`docs/` 由 `files` 白名单挡在外面。
   发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
   若 npm 上名字被占用，改成带 scope 的名字，并把本文档里的命令同步改掉。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
-- 打标签前跑一遍 `npm test`（105 项）与 `npm run gen-route`（确认生成物不漂移）。
+- 打标签前跑一遍 `npm test`（109 项）与 `npm run gen-route`（确认生成物不漂移）。
 
 ## 密钥与模型向导
 
@@ -136,15 +136,37 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
 2. 宿主半拿这把 key 去 `GET {baseURL}/models`，把站点实际在售的模型列出来。
 3. 勾选要用的模型，点「导入所选模型」。
 
-导入时做三件事：密钥写进 `$DSH_HOME/.credentials.yaml`、勾选的目录写进本插件设置
-`models`、再由宿主把目录装回 `llm-pi-ai` 路由。模型选择器立刻能看到它们，不用重启。
+**第 2 步列出的不只是名字。** 每行都带一条能力摘要（形如
+`输入 文本 · 上下文 1,000,000 · 最大输出 384,000 · 5 档推理`），行尾的「调整能力」可以
+逐条展开修改：
+
+| 控件 | 落到路由描述符的字段 | 初值 |
+| --- | --- | --- |
+| 输入：文本 / 图像 | `input` | 只勾「文本」 |
+| 上下文 | `contextWindow` | 内置清单那条的值（1,000,000） |
+| 最大输出 | `maxTokens` | 同上（384,000） |
+| 推理档位：关闭 / minimal / low / medium / high / xhigh / max | `reasoningEfforts` | 内置清单那 6 档 |
+
+每行的能力**互相独立**：改一行不影响其它行，也不改内置清单模板。数字留空表示「用内置默认」。
+
+要注意的是：`api3d.cn` 的 `/v1/models` 只回 `id` 与 `display_name`，不报输入模态、上下文
+窗口或推理档位，所以这里的初值是本插件的内置默认，**不是站点声明的值**。勾「图像」或加档位
+之前先确认站点真的支持，否则请求会被上游拒绝。合法词汇表由 DSH 的 `dsh-llm-pi-ai` 适配器
+定义：模态只有 `text` / `image`，档位只有 `off` / `minimal` / `low` / `medium` / `high` /
+`xhigh` / `max`；勾成别的会在执行时被适配器拒掉。站点**真报了的**能力字段（`input` /
+`input_modalities` / `context_window` / `max_input_tokens` / `limit.context` /
+`max_output_tokens` / `top_provider.max_completion_tokens` 等常见写法）会被直接采用，
+站点没报的才回落默认 —— 「没说」与「说了不支持」是两件事，不会互相冒充。
+
+导入时做三件事：密钥写进 `$DSH_HOME/.credentials.yaml`、勾选的目录（连同各自的能力）写进
+本插件设置 `models`、再由宿主把目录装回 `llm-pi-ai` 路由。模型选择器立刻能看到它们，不用重启。
 
 为什么查询要绕到宿主：`api3d.cn` 的 `/v1/models` 不返回任何 `access-control-*`
 头，浏览器直接请求会被跨域预检挡成 403。向导背后的两条宿主路由是：
 
 | 路由 | 方法 | 作用 |
 | --- | --- | --- |
-| `/api/api3d.models` | POST `{apiKey, baseURL?}` | 宿主侧查站点模型目录，返回归一后的 `{id, displayName}` |
+| `/api/api3d.models` | POST `{apiKey, baseURL?}` | 宿主侧查站点模型目录，返回归一后的目录（站点真报了的输入模态/上下文/最大输出/推理档位一并带上）与一组 `defaults`（向导每行的初值） |
 | `/api/api3d.apply` | POST | 把设置里已导入的目录装回 `llm-pi-ai` 路由 |
 
 两条都注册在 `connection.fetch` 的精确路由表上，所以自动带 DSH 的 Host/Origin
@@ -158,6 +180,10 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；后者装的是 `dsh-api3d ^
 | 第 1 步：填密钥 | 第 2 步：勾选模型 | 导入完成 |
 | --- | --- | --- |
 | ![填写 API Key](docs/wizard-step1-key.png) | ![勾选要导入的模型](docs/wizard-step2-models.png) | ![导入完成](docs/wizard-step3-done.png) |
+
+第 2 步展开「调整能力」后（同样是真站点、真密钥跑出来的，这行改了输入模态、上下文与最大输出）：
+
+![逐条调整输入模态、上下文窗口、最大输出与推理档位](docs/wizard-step2-caps.png)
 
 导入后重启开发实例，日志从 `模型目录 1 个（内置）` 变成 `模型目录 1 个（从站点导入）`，
 证明目录确实落了盘并被重新读回。
@@ -262,14 +288,18 @@ registry 装真拷贝。`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 声
 | `direct-transport.test.mjs` | 直连传输打真实 loopback 替身：header 保真、不跟随重定向、abort 切断连接 |
 | `integration.test.mjs` | **端到端**：围栏 + 直连传输真的把请求送到一台 TCP 服务器；402 额度注解的边界 |
 | `client-bundle.test.mjs` | 浏览器半装载契约：两半的设置命名空间必须逐字相等、六个槽位（含侧边栏入口与 `shell.overlay` 向导）、字典、向导第一步「前往 api3d.cn 获取」外链的地址与 `target`/`rel`、**表单控制器以原型方法提供时不能丢 `this`**（真机崩溃回归） |
-| `models.test.mjs` | 向导的宿主半：目录归一、`discoverModels` 失败分类、`applyImportedModels` 写回、两条 `/api/api3d.*` 路由的注册与鉴权边界 |
+| `models.test.mjs` | 向导的宿主半：目录归一（含站点上报的能力字段与「没说就不编造」的边界、能力字段往返）、`discoverModels` 失败分类与 `defaults`、逐模型落能力覆盖（不改模板）、`applyImportedModels` 写回、两条 `/api/api3d.*` 路由的注册与鉴权边界 |
 
 ## 已知限制
 
 - **单站。** 只支持一个基础地址。多站请用通用网关 provider 类插件。
 - **模型目录：内置清单 + 向导导入。** 默认用 `cordis.patch.yml` 手写的那份；向导导入的
-  目录存在插件设置 `models` 里（落进 profile 补丁层，重启仍生效）。适配器自带的自动发现
+  目录存在插件设置 `models` 里（落进 profile 补丁层，重启仍生效），每条可以带自己的
+  `input` / `contextWindow` / `maxTokens` / `reasoningEfforts`。适配器自带的自动发现
   仍然不用 —— 它去哨兵主机发现必然失败，见「坑二」。
+- **能力初值是本插件的默认，不是站点声明。** `api3d.cn` 的 `/v1/models` 不报能力，所以向导
+  里看到的上下文窗口、最大输出与推理档位都来自内置清单，需要按站点实际能力逐条改；勾错了
+  由上游拒绝。
 - **密钥由向导代写。** 向导把这把 key 写进 `$DSH_HOME/.credentials.yaml` 的
   `API3D_API_KEY`；也可以手动在设置卡或「设置 → 模型 → API3D」里填，两条路等价。
   已配置后卡片上才出现「清除密钥」。

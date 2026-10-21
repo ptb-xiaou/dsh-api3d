@@ -81,7 +81,7 @@ The fence also carries the outbound compatibility a relay usually needs:
 | `lib/direct-fetch.js` | direct transport (`node:http`/`node:https`, bypassing the process proxy) |
 | `scripts/gen-route.mjs` | generates `lib/route.js` from `cordis.patch.yml` and checks the sentinel host matches |
 | `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, to verify the site's actual catalog against what is declared |
-| `test/` | 105 assertions, see below |
+| `test/` | 109 assertions, see below |
 
 ## Install and distribution
 
@@ -89,9 +89,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.1.1`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.0`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.1.1.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.0.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -99,7 +99,7 @@ not pick it up.
 
 Three facts verified on clean isolated instances through the real install path, twice over —
 once with the tarball produced by `npm pack`, once through the npm channel
-(`add dsh-api3d`, which installed `dsh-api3d ^0.1.1` and printed the same
+(`add dsh-api3d`, which installed `dsh-api3d ^0.2.0` and printed the same
 `api3d: 路由 api3d → …` line at boot):
 
 1. `add` appends `dsh-api3d` to that profile's `package.json`
@@ -132,10 +132,10 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and the generated `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.1.1`** (`latest`), and the public tarball is
+- **npm**: published as **`dsh-api3d@0.2.0`** (`latest`), and the public tarball is
   SHA512-identical to the local `npm pack` output. `npm pack` was checked to contain
   exactly 11 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
-  `LICENSE`, `NOTICE` and `package.json` (56.2 kB packed / 158.2 kB unpacked);
+  `LICENSE`, `NOTICE` and `package.json` (65.9 kB packed / 187.7 kB unpacked);
   `test/`, `scripts/` and `docs/` are kept out by the `files` allowlist. Release with a
   token that may publish directly; if the account is required to stage publishes,
   `npm publish` fails with `E_STAGE_REQUIRED` and you need
@@ -143,7 +143,7 @@ upgrade breaks the plugin, please open an issue.
   taken on npm, switch to a scoped name and update the commands in this document.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
-- Before tagging, run `npm test` (105 assertions) and `npm run gen-route` (to confirm the
+- Before tagging, run `npm test` (109 assertions) and `npm run gen-route` (to confirm the
   generated file has not drifted).
 
 ## Key and model wizard
@@ -161,9 +161,37 @@ automatically the first time the panel is opened and no models have been importe
    actually serves.
 3. Tick the ones you want and click **导入所选模型** ("import selected models").
 
+**Step 2 lists more than names.** Every row carries a capability summary (shaped like
+`输入 文本 · 上下文 1,000,000 · 最大输出 384,000 · 5 档推理`), and the **调整能力** ("adjust
+capabilities") button at the end of the row expands a per-model editor:
+
+| Control | Field it writes into the route descriptor | Initial value |
+| --- | --- | --- |
+| Input: 文本 / 图像 (text / image) | `input` | `text` only |
+| Context (上下文) | `contextWindow` | whatever the built-in entry declares (1,000,000) |
+| Max output (最大输出) | `maxTokens` | same source (384,000) |
+| Reasoning levels: 关闭 / minimal / low / medium / high / xhigh / max | `reasoningEfforts` | the six levels of the built-in entry |
+
+Capabilities are **per row**: editing one row leaves the others alone and never mutates the
+built-in template. Leaving a number box empty means "use the built-in default".
+
+One caveat matters here: `api3d.cn`'s `/v1/models` returns only `id` and `display_name` — no
+input modalities, no context window, no reasoning levels. So the initial values come from
+this plugin's built-in defaults, **not from anything the site declared**. Confirm the site
+really supports image input or an extra level before ticking it, or the upstream will reject
+the request. The legal vocabulary is defined by DSH's `dsh-llm-pi-ai` adapter: modalities are
+only `text` / `image`, levels are only `off` / `minimal` / `low` / `medium` / `high` /
+`xhigh` / `max`, and anything else is rejected at execution time. Capability fields the site
+**does** report (`input`, `input_modalities`, `context_window`, `max_input_tokens`,
+`limit.context`, `max_output_tokens`, `top_provider.max_completion_tokens`, and similar
+spellings) are adopted as-is; only what the site stays silent about falls back to the
+defaults — "did not say" and "said it does not support" are different things and never
+impersonate each other.
+
 Import does three things: writes the key into `$DSH_HOME/.credentials.yaml`, writes the
-ticked catalog into this plugin's `models` setting, and has the host install that catalog
-back into the `llm-pi-ai` route. The model picker sees them immediately, with no restart.
+ticked catalog (each entry with its own capabilities) into this plugin's `models` setting,
+and has the host install that catalog back into the `llm-pi-ai` route. The model picker sees
+them immediately, with no restart.
 
 Why the query goes through the host: `api3d.cn`'s `/v1/models` returns no
 `access-control-*` headers at all, so a direct browser request is blocked by the
@@ -171,7 +199,7 @@ cross-origin preflight with a 403. The two host routes behind the wizard are:
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/api/api3d.models` | POST `{apiKey, baseURL?}` | query the site's model catalog host-side; returns normalized `{id, displayName}` |
+| `/api/api3d.models` | POST `{apiKey, baseURL?}` | query the site's model catalog host-side; returns the normalized catalog (including any input modalities / context / max output / reasoning levels the site really reports) plus a set of `defaults` (the seed for each wizard row) |
 | `/api/api3d.apply` | POST | install the catalog already stored in settings back into the `llm-pi-ai` route |
 
 Both are registered on `connection.fetch`'s exact-route table, so they automatically carry
@@ -188,6 +216,11 @@ This path has been run end to end in an isolated development instance with a rea
 | Step 1: enter the key | Step 2: tick models | Import done |
 | --- | --- | --- |
 | ![Entering the API key](docs/wizard-step1-key.png) | ![Ticking the models to import](docs/wizard-step2-models.png) | ![Import finished](docs/wizard-step3-done.png) |
+
+Step 2 with **调整能力** expanded (again from a real site with a real key; this row had its
+input modalities, context window and max output edited):
+
+![Editing input modalities, context window, max output and reasoning levels per model](docs/wizard-step2-caps.png)
 
 After importing, restarting the development instance changes the log line from
 `模型目录 1 个（内置）` to `模型目录 1 个（从站点导入）`, which proves the catalog really
@@ -305,7 +338,7 @@ Test coverage:
 | `direct-transport.test.mjs` | direct transport against a real loopback stand-in: header fidelity, no redirect following, abort tearing down the connection |
 | `integration.test.mjs` | **end to end**: fence + direct transport really deliver the request to a TCP server; the boundaries of 402 quota annotation |
 | `client-bundle.test.mjs` | browser-half loading contract: both halves' settings namespaces must be literally equal, six slots (including the sidebar entry and the `shell.overlay` wizard), dictionaries, the address and `target`/`rel` of the wizard's "get one at api3d.cn" link, and **the form controller keeping `this` when it is provided as prototype methods** (a real-machine crash regression) |
-| `models.test.mjs` | the wizard's host half: catalog normalization, `discoverModels` failure classification, `applyImportedModels` write-back, registration and auth boundaries of the two `/api/api3d.*` routes |
+| `models.test.mjs` | the wizard's host half: catalog normalization (including capability fields the site reports, the "absent means do not invent" boundary, and the capability round-trip), `discoverModels` failure classification and `defaults`, per-model capability overrides that leave the template untouched, `applyImportedModels` write-back, registration and auth boundaries of the two `/api/api3d.*` routes |
 
 ## Known limitations
 
@@ -313,9 +346,15 @@ Test coverage:
   provider plugin.
 - **Model catalog: built-in list + wizard import.** By default it uses the one hand-written
   in `cordis.patch.yml`; the wizard's catalog lives in the plugin's `models` setting (and
-  therefore in the profile patch layer, so it survives a restart). The adapter's own
+  therefore in the profile patch layer, so it survives a restart), and each entry may carry
+  its own `input` / `contextWindow` / `maxTokens` / `reasoningEfforts`. The adapter's own
   automatic discovery is still unused — it would discover against the sentinel host and
   fail; see trap 2.
+- **Capability initial values are this plugin's defaults, not the site's declarations.**
+  `api3d.cn`'s `/v1/models` reports no capabilities, so the context window, max output and
+  reasoning levels shown in the wizard come from the built-in entry and must be adjusted per
+  model to match what the site really does; ticking something the site does not support is
+  rejected upstream.
 - **The key is written by the wizard.** The wizard writes it into `$DSH_HOME/.credentials.yaml`
   as `API3D_API_KEY`; you can also enter it by hand on the settings card or under
   Settings → Models → API3D, and the two paths are equivalent. The "clear key" button only
