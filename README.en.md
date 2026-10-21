@@ -5,6 +5,8 @@
 
 [中文](README.md) · **English**
 
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.0](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.0](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.0) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
 on the plugin's settings card — no file editing, no reinstall. The site address is already

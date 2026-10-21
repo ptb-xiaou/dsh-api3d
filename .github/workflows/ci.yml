@@ -1,0 +1,79 @@
+name: CI
+
+# ============================================================================
+# 只做检查、永不发布：push / PR 到 main 都会跑。
+#
+# 发布由 .github/workflows/publish.yml（**手动触发**）负责，那边挂同一组门禁，
+# 审计不过就不许发布。
+#
+# 这里拦的都是「错了不会报错、只会静默失效」的事：
+#   · 语法 —— 宿主是 ESM（.js + "type":"module"），客户端半是普通脚本，两个都要能解析；
+#   · 开发机绝对路径 —— 发布副本里绝不能出现本机的 E:\DSH / TestBox / C:\Users\Administrator；
+#   · 单测 —— test/*.test.mjs 覆盖围栏（fence）、路由自愈、静默重试、直连传输、
+#            客户端 bundle、模型目录、工具 schema、设置卡与向导；
+#   · package.json —— 版本必须 semver、包名必须是 dsh-api3d、files 白名单不能丢；
+#   · npm pack —— 真打一次包，确认 files 白名单指向的文件确实在包里。
+# ============================================================================
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      # devDependencies 里有 js-yaml / react / @deepseek-ai/schemastery，单测要用
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Syntax check
+        run: |
+          for f in lib/index.js lib/client.js lib/direct-fetch.js lib/route.js lib/site.js \
+                   scripts/gen-route.mjs scripts/probe-models.mjs; do
+            node --check "$f"
+          done
+          echo "语法检查通过"
+
+      # 发布副本不得含开发机绝对路径：判据是 E:\DSH 与 TestBox（本机开发目录名），
+      # 另加 C:\Users\Administrator。放在这里是因为"忘了 strip / 顺手把本机路径写进
+      # 默认值"这类改动不会让任何测试变红，只会在用户机器上静默读不到文件。
+      - name: Dev-path audit
+        run: |
+          if grep -nE 'E:\\DSH|DSH-Test|TestBox|C:\\Users\\Administrator' \
+               lib/*.js cordis.patch.yml package.json README.md README.en.md; then
+            echo "::error::发布文件里出现了开发机绝对路径"
+            exit 1
+          fi
+          echo "未发现开发机路径"
+
+      - name: Unit tests
+        run: npm test
+
+      - name: package.json sanity
+        run: |
+          node -e "
+            const p = require('./package.json')
+            if (!/^\d+\.\d+\.\d+/.test(String(p.version))) { console.error('version 不是 semver: ' + p.version); process.exit(1) }
+            if (p.name !== 'dsh-api3d') { console.error('包名意外: ' + p.name); process.exit(1) }
+            if (!Array.isArray(p.files) || !p.files.length) { console.error('files 白名单缺失'); process.exit(1) }
+            if (!p.dsh || !p.dsh.bundle || !p.dsh.bundle.patch) { console.error('dsh.bundle.patch 缺失'); process.exit(1) }
+            console.log('package.json OK: ' + p.name + '@' + p.version)
+          "
+
+      # 真打一次包（不发布）：挡的是「源码全对、装出来起不来」——
+      # files 白名单写了但文件不在、dsh.bundle.patch 指向的文件没被打进去。
+      - name: Packed artifact sanity
+        run: npm pack --dry-run

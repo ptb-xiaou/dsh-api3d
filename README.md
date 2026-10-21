@@ -5,6 +5,8 @@
 
 **中文** · [English](README.en.md)
 
+> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.0](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.0](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.0) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
+
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
 一条 pi-ai 路由，基础地址、API Key、出站兼容开关都在「插件」设置页里填，不用改文件、
 不用重装。站点地址已经写在 `lib/site.js` 里，装上就是零配置可用。

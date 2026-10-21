@@ -1,0 +1,15 @@
+# 统一换行符：文本文件一律以 LF 存储与检出。
+# 为什么：本机 core.autocrlf=true 时，git 检出/恢复会把工作区文件变成 CRLF，
+# 于是「工作区打的包」与「仓库里的字节」不再一致 —— 发布副本会和 tag 对不上。
+# 规则：文本文件一律 LF；二进制文件不做任何转换。
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.wav binary
+*.mp3 binary
+*.ico binary
+*.tgz binary
+*.zip binary

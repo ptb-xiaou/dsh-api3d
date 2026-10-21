@@ -1,0 +1,185 @@
+name: Publish to npm
+
+# ============================================================================
+# 手动触发（GitHub UI 的 Run workflow，或 `gh workflow run publish.yml`）。
+#
+# 为什么不挂在 push 上：npm 同名版本一旦发布就**不能覆盖**，只能 deprecate。
+#   push 触发意味着「某次提交里带了 version 变更」就会立刻发布，中间没有人工确认。
+#   日常 push 的检查交给 .github/workflows/ci.yml。
+#
+# 版本管理：**不自动递增**，发布版本号 = 当前 package.json 的 version 字段。
+# 发版流程：改 version → push → 在 Actions 里 Run workflow。
+# Release 说明：上一个 v* tag 之后合入 main 的 PR 标题与编号；没有 tag 时取全部。
+#
+# 发布方式：优先 npm Trusted Publishing（OIDC，permissions.id-token: write），
+#   仓库里配了 NPM_TOKEN secret 时也能用 classic token（二选一）。
+# ============================================================================
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '本次发版原因（可留空；非空时会写在 Release 说明最前面）'
+        required: false
+        default: ''
+      dry_run:
+        description: '只演练：跑全部检查并生成 Release 说明，但不发布、不建 Release'
+        type: boolean
+        default: false
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # 创建 tag / GitHub Release
+  id-token: write   # npm Trusted Publishing (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # 手动触发时 GitHub 允许选分支 —— 从非 main 的分支发版会把"那个分支的版本"发出去
+      - name: Guard (must run on main)
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::发布只允许在 main 上触发（当前 ${GITHUB_REF}）。请在 Run workflow 里把 Use workflow from 选成 main。"
+            exit 1
+          fi
+          echo "ref = ${GITHUB_REF}（OK）"
+
+      # fetch-depth: 0 拉全量历史与 tag，changelog 需要 diff 上一个版本 tag
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      # 必须：npm >= 11.5.1 才支持 Trusted Publishing (OIDC) 自动交换；npm 10.x 会 ENEEDAUTH
+      - name: Upgrade npm for OIDC support
+        run: npm install -g npm@latest
+
+      - name: Clean .npmrc for OIDC
+        run: |
+          if [ -n "$NPM_CONFIG_USERCONFIG" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
+            echo "Stripping _authToken from .npmrc for OIDC..."
+            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+          fi
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      # 发版前门禁（与 ci.yml 同一组：审计不过就不许发布）
+      - name: Syntax + dev-path audit
+        run: |
+          for f in lib/index.js lib/client.js lib/direct-fetch.js lib/route.js lib/site.js \
+                   scripts/gen-route.mjs scripts/probe-models.mjs; do
+            node --check "$f"
+          done
+          if grep -nE 'E:\\DSH|DSH-Test|TestBox|C:\\Users\\Administrator' \
+               lib/*.js cordis.patch.yml package.json README.md README.en.md; then
+            echo "::error::发布文件里出现了开发机绝对路径"
+            exit 1
+          fi
+          echo "语法与路径检查通过"
+
+      - name: Unit tests
+        run: npm test
+
+      - name: package.json sanity
+        run: |
+          node -e "
+            const p = require('./package.json')
+            if (!/^\d+\.\d+\.\d+/.test(String(p.version))) { console.error('version 不是 semver: ' + p.version); process.exit(1) }
+            if (p.name !== 'dsh-api3d') { console.error('包名意外: ' + p.name); process.exit(1) }
+            console.log('package.json OK: ' + p.name + '@' + p.version)
+          "
+
+      # 打包后的内容必须齐全（files 白名单 / dsh.bundle.patch 指向的文件）
+      - name: Packed artifact sanity
+        run: npm pack --dry-run
+
+      - name: Check if version already published
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/dsh-api3d/${VERSION}")
+          echo "### dsh-api3d v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$CODE" = "200" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "版本 ${VERSION} 已存在于 npm，跳过发布" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "版本 ${VERSION} 未发布，开始发布" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
+        run: npm publish --access public --registry https://registry.npmjs.org --provenance=false
+        env:
+          # 可选：配了 NPM_TOKEN secret 就用它；未配置时自动走 OIDC
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build release changelog
+        id: changelog
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            # 用 Unix 时间戳比较：mergedAt 是 UTC(Z)，%cI 带本地时区偏移，字符串比较跨时区会错判
+            SINCE=$(git log -1 --format=%ct "$PREV_TAG")
+            echo "changelog 范围：${PREV_TAG} 之后"
+          else
+            SINCE="0"
+            echo "仓库没有 tag，changelog 回退为全部已合并 PR"
+          fi
+          gh pr list --state merged --base main --limit 500 --json number,title,mergedAt \
+            | jq -r --argjson since "${SINCE:-0}" \
+              '[ .[] | select($since == 0 or (.mergedAt | fromdateiso8601) > $since) ]
+               | sort_by(.number)
+               | .[] | "- \(.title) (#\(.number))"' > pr_lines.md
+          if [ ! -s pr_lines.md ]; then
+            echo "- 本次发布无关联的合并 PR" > pr_lines.md
+          fi
+          {
+            if [ -n "${{ github.event.inputs.reason }}" ]; then
+              echo "${{ github.event.inputs.reason }}"
+              echo
+            fi
+            echo "## What's Changed"
+            echo
+            cat pr_lines.md
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...v${VERSION}"
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      # 幂等：release 已存在则跳过
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} 已存在，跳过创建"
+            exit 0
+          fi
+          gh release create "v${VERSION}" \
+            --target "${{ github.sha }}" \
+            --title "v${VERSION}" \
+            --notes-file release_notes.md
+
+      - name: Dry-run summary
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "### 演练结束（未发布、未建 Release）" >> "$GITHUB_STEP_SUMMARY"
+          echo "上面 'Build release changelog' 那一步打印的就是本次会写入 Release 的说明。" >> "$GITHUB_STEP_SUMMARY"
