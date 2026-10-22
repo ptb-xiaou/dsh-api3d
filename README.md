@@ -5,7 +5,7 @@
 
 **中文** · [English](README.en.md)
 
-> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.4](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.4](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.4) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
+> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.5](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.5](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.5) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
 
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
 一条 pi-ai 路由，基础地址、API Key、出站兼容开关都在「插件」设置页里填，不用改文件、
@@ -86,7 +86,7 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 | `lib/route.js` | **手写**：`ROUTE`（路由骨架，**不含 `models`**）与 `MODEL_TEMPLATE`（向导每行的能力初值） |
 | `lib/direct-fetch.js` | 直连传输（`node:http`/`node:https`，绕开进程代理） |
 | `scripts/probe-models.mjs` | 用真实 key 打一次 `GET {baseURL}/models`，与**设置里已导入的目录**做 diff |
-| `test/` | 121 项断言，见下 |
+| `test/` | 125 项断言，见下 |
 
 ## 安装与分发
 
@@ -94,9 +94,9 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.4`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.5`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.4.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.5.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
@@ -130,7 +130,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 `lib/`（含手写的 `lib/client.js` 与 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.2.4`**（官方 registry 的 `latest`），registry 记录的
+- **npm**：已发布 **`dsh-api3d@0.2.5`**（官方 registry 的 `latest`），registry 记录的
   `dist.shasum`（`761bea55c8…`）与官方 tarball 实际下载并算出的 SHA-1 一致（325526 字节）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图
   （325.5 kB 打包 / 477.4 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
@@ -147,7 +147,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
   SHA-1。另外 `npm publish` 打印 `+ dsh-api3d@x.y.z` 只代表**已受理**（同一句还有
   `being processed`）：packument 会先出现，tarball 在 CDN 上要再过几分钟才 200。
 - **GitHub Releases**：把 `npm pack` 的 tgz 传上去，使用者可用上面的 tarball 直装。
-- 打标签前跑一遍 `npm test`（121 项）。
+- 打标签前跑一遍 `npm test`（125 项）。
 
 ## 密钥与模型向导
 
@@ -197,13 +197,17 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 还没重新解析，装回去的也一定是刚勾选的那份；解析期钩子随后会用设置里的同一份目录覆盖
 任何同名的 `api3d` 路由（本插件自己那条说了算）。
 
+补丁层里**完全没有** `- id: llm-pi-ai` 条目也能导入：条目缺失、或它的形态不是键值对时，
+宿主半把它当作一份空配置，从零建出 `providers.api3d` 写回去 —— 不会再出现「配置不可合并」
+这类拒绝。（0.2.5 之前这里会报错，等于要求用户先手写一条 `llm-pi-ai` 声明才用得了向导。）
+
 为什么查询要绕到宿主：`api3d.cn` 的 `/v1/models` 不返回任何 `access-control-*`
 头，浏览器直接请求会被跨域预检挡成 403。向导背后的两条宿主路由是：
 
 | 路由 | 方法 | 作用 |
 | --- | --- | --- |
 | `/api/api3d.models` | POST `{apiKey, baseURL?}` | 宿主侧查站点模型目录，返回归一后的目录（站点真报了的输入模态/上下文/最大输出/推理档位一并带上）与一组 `defaults`（向导每行的初值） |
-| `/api/api3d.apply` | POST | 把设置里已导入的目录装回 `llm-pi-ai` 路由 |
+| `/api/api3d.apply` | POST `{models?}` | 把请求体里的目录（缺省则用设置里已导入的那份）装回 `llm-pi-ai` 路由；补丁层没有 `llm-pi-ai` 条目时也会从零建出并写入 |
 
 两条都注册在 `connection.fetch` 的精确路由表上，所以自动带 DSH 的 Host/Origin
 围栏与浏览器会话鉴权；未授权的请求到不了处理函数。
@@ -303,7 +307,7 @@ npm run probe-models -- --profile desktop       # 指定读哪个 profile 里已
 
 ```bash
 npm run probe-models  # 核对站点实际提供的 id 与已导入目录的差异
-npm test              # node --test "test/*.test.mjs"（121 项）
+npm test              # node --test "test/*.test.mjs"（125 项）
 ```
 
 依赖是**软链到宿主 `node_modules`** 的（`@deepseek-ai/schemastery` / `js-yaml` /

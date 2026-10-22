@@ -177,16 +177,27 @@ test('claimRelayRoute：没有导入任何模型时不声明路由', async () =>
   assert.equal(writes, 0, '没有目录时不该装一条零模型路由上去')
 })
 
-test('claimRelayRoute：providers 类型不对时不碰它，直接报 unusable', async () => {
-  let writes = 0
+test('claimRelayRoute：条目压根没有配置（profile 不声明 llm-pi-ai）时照样把路由装上去', async () => {
+  const seen = []
+  const ctx = makeLoaderCtx({
+    entries: [{ options: { id: PI_AI_ENTRY.id, name: PI_AI_ENTRY.name, config: undefined } }],
+    update: async (next) => seen.push(next),
+  })
+  assert.equal(await claimRelayRoute(ctx, settingsWith()), 'claimed')
+  assert.equal(seen.length, 1)
+  assert.deepEqual(seen[0].config.providers[PROVIDER], OWNED)
+})
+
+test('claimRelayRoute：providers 类型不对时按空配置覆盖（导入是显式动作）', async () => {
+  const seen = []
   const ctx = makeLoaderCtx({
     entries: [{ options: { id: PI_AI_ENTRY.id, name: PI_AI_ENTRY.name, config: { providers: [] } } }],
-    update: async () => {
-      writes += 1
-    },
+    update: async (next) => seen.push(next),
   })
-  assert.equal(await claimRelayRoute(ctx, settingsWith()), 'unusable')
-  assert.equal(writes, 0, '存在但类型不对是 profile 自己的表达，必须原样放行')
+  assert.equal(await claimRelayRoute(ctx, settingsWith()), 'claimed')
+  assert.equal(seen.length, 1)
+  assert.deepEqual(Object.keys(seen[0].config.providers), [PROVIDER])
+  assert.deepEqual(seen[0].config.providers[PROVIDER], OWNED)
 })
 
 test('claimRelayRoute：条目不可配置时报 failed，而不是抛出去', async () => {

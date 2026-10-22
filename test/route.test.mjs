@@ -101,8 +101,29 @@ test('relayRouteState 区分 declared / missing / unusable', () => {
   assert.equal(relayRouteState({ providers: undefined }), 'missing')
   assert.equal(relayRouteState({ providers: [] }), 'unusable')
   assert.equal(relayRouteState({ providers: 'nope' }), 'unusable')
-  assert.equal(relayRouteState(null), 'unusable')
+  // 整条配置缺失是常态（本包不再自带 llm-pi-ai 声明）：那是「没有」，不是「不可用」。
+  assert.equal(relayRouteState(undefined), 'missing')
+  assert.equal(relayRouteState(null), 'missing')
   assert.equal(relayRouteState([]), 'unusable')
+})
+
+test('withRelayRoute 从「整条配置缺失」起底', () => {
+  const merged = withRelayRoute(undefined, INSTALLED)
+  assert.deepEqual(merged, { providers: { [PROVIDER]: INSTALLED } })
+  assert.deepEqual(withRelayRoute(null, INSTALLED, { replace: true }), {
+    providers: { [PROVIDER]: INSTALLED },
+  })
+})
+
+test('withRelayRoute 默认放行类型不对的配置，force 时才按空配置覆盖', () => {
+  const broken = { providers: [] }
+  assert.equal(withRelayRoute(broken, INSTALLED, { replace: true }), broken, '默认原样放行')
+
+  const forced = withRelayRoute(broken, INSTALLED, { replace: true, force: true })
+  assert.deepEqual(forced, { providers: { [PROVIDER]: INSTALLED } })
+
+  const scalar = withRelayRoute('nope', INSTALLED, { replace: true, force: true })
+  assert.deepEqual(scalar, { providers: { [PROVIDER]: INSTALLED } })
 })
 
 test('withRelayRoute 只补缺失，不覆盖 profile 自己的声明', () => {

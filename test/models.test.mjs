@@ -450,7 +450,7 @@ test('applyImportedModels 在路由已经是同一份时不再写条目', async 
   assert.equal(updates.length, 1)
 })
 
-test('applyImportedModels 的失败分类：没导入、没 loader、没条目、条目不可合并', async () => {
+test('applyImportedModels 的失败分类：没导入、没 loader、没条目', async () => {
   const config = makeConfig()
   const { entry } = makeEntry({ providers: {} })
   const { ctx } = makeHostCtx({ loader: { entries: () => [entry] } })
@@ -463,10 +463,25 @@ test('applyImportedModels 的失败分类：没导入、没 loader、没条目�
 
   const noEntry = makeHostCtx({ loader: { entries: () => [] } })
   assert.equal((await applyImportedModels(noEntry.ctx, config)).code, 'no-entry')
+})
 
-  const broken = makeEntry('nope')
+test('applyImportedModels：配置整条缺失或类型不对时覆盖，而不是报「不可合并」', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1', displayName: 'M1', input: ['text', 'image'] }]))
+
+  // profile 里没有 llm-pi-ai 条目 —— 本包不再自带声明之后这是常态。
+  const absent = makeEntry(undefined)
+  const absentCtx = makeHostCtx({ loader: { entries: () => [absent.entry] } })
+  assert.deepEqual(await applyImportedModels(absentCtx.ctx, config), { ok: true, models: ['m1'] })
+  assert.equal(absent.updates.length, 1)
+  assert.deepEqual(Object.keys(absent.updates[0].config.providers), [PROVIDER])
+  assert.deepEqual(absent.updates[0].config.providers[PROVIDER].models[0].input, ['text', 'image'])
+
+  // providers 类型不对（profile 写了数组）：显式导入照样覆盖成一份合法字典。
+  const broken = makeEntry({ providers: [] })
   const brokenCtx = makeHostCtx({ loader: { entries: () => [broken.entry] } })
-  assert.equal((await applyImportedModels(brokenCtx.ctx, config)).code, 'unusable')
+  assert.deepEqual(await applyImportedModels(brokenCtx.ctx, config), { ok: true, models: ['m1'] })
+  assert.deepEqual(Object.keys(broken.updates[0].config.providers), [PROVIDER])
 })
 
 test('apply 把两条向导路由注册进 connection 的鉴权围栏', async () => {

@@ -5,7 +5,7 @@
 
 [中文](README.md) · **English**
 
-> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.4](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.4](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.4) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.5](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.5](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.5) ｜ MIT (derivation notes in [NOTICE](NOTICE))
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
@@ -102,7 +102,7 @@ The fence also carries the outbound compatibility a relay usually needs:
 | `lib/route.js` | **hand-written**: `ROUTE` (route skeleton, **no `models`**) and `MODEL_TEMPLATE` (the wizard's per-row capability initial values) |
 | `lib/direct-fetch.js` | direct transport (`node:http`/`node:https`, bypassing the process proxy) |
 | `scripts/probe-models.mjs` | one real `GET {baseURL}/models` with a real key, diffed against the catalog **already imported into settings** |
-| `test/` | 121 assertions, see below |
+| `test/` | 125 assertions, see below |
 
 ## Install and distribution
 
@@ -110,9 +110,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.4`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.5`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.4.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.5.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -153,7 +153,7 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.4`** (`latest` on the official registry); the
+- **npm**: published as **`dsh-api3d@0.2.5`** (`latest` on the official registry); the
   `dist.shasum` the registry records (`761bea55c8…`) matches the SHA-1 of the official
   tarball downloaded and hashed locally (325526 bytes). `npm pack` was checked to contain
   exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
@@ -178,7 +178,7 @@ upgrade breaks the plugin, please open an issue.
   appears first and the tarball starts returning 200 from the CDN only a few minutes later.
 - **GitHub Releases**: upload the tgz `npm pack` produces, and users can install it with
   the tarball route above.
-- Before tagging, run `npm test` (121 assertions).
+- Before tagging, run `npm test` (125 assertions).
 
 ## Key and model wizard
 
@@ -241,6 +241,12 @@ setting, so even if that setting has not been re-resolved yet, what gets install
 what was just ticked; the resolution-time hook then overwrites any same-name `api3d` route
 with the same catalog from settings (this plugin's own version wins).
 
+Import also works when the patch layer has **no** `- id: llm-pi-ai` entry at all: when the entry
+is missing, or its shape is not a mapping, the host half treats it as an empty base and builds
+`providers.api3d` from scratch — no more "configuration cannot be merged" style refusals.
+(Before 0.2.5 this was rejected, which effectively required users to hand-write an `llm-pi-ai`
+declaration before the wizard was usable.)
+
 Why the query goes through the host: `api3d.cn`'s `/v1/models` returns no
 `access-control-*` headers at all, so a direct browser request is blocked by the
 cross-origin preflight with a 403. The two host routes behind the wizard are:
@@ -248,7 +254,7 @@ cross-origin preflight with a 403. The two host routes behind the wizard are:
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `/api/api3d.models` | POST `{apiKey, baseURL?}` | query the site's model catalog host-side; returns the normalized catalog (including any input modalities / context / max output / reasoning levels the site really reports) plus a set of `defaults` (the seed for each wizard row) |
-| `/api/api3d.apply` | POST | install the catalog already stored in settings back into the `llm-pi-ai` route |
+| `/api/api3d.apply` | POST `{models?}` | install the catalog from the request body (or, when absent, the one already stored in settings) back into the `llm-pi-ai` route; builds that entry from scratch when the patch layer has none |
 
 Both are registered on `connection.fetch`'s exact-route table, so they automatically carry
 DSH's Host/Origin fence and browser session authentication; unauthorized requests never
@@ -365,7 +371,7 @@ Two implementation routes:
 
 ```bash
 npm run probe-models  # diff the site's real ids against the imported catalog
-npm test              # node --test "test/*.test.mjs" (121 assertions)
+npm test              # node --test "test/*.test.mjs" (125 assertions)
 ```
 
 Dependencies are **junction-linked to the host's `node_modules`**
