@@ -142,8 +142,8 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图；
   `test/`、`scripts/` 由 `files` 白名单挡在外面
   （`docs/` 从 0.2.1 起进白名单 —— 否则 npm 页面上的 README 截图是断图）。
-  实测（0.2.7）：`dist.shasum` = `25946f7ef3d2e87ffcd25ccd302503220b405abd`，registry 记录
-  `fileCount` 16 / `unpackedSize` 540591；tarball 346156 字节（346.2 kB 打包 / 540.6 kB 解开），
+  实测（0.2.8）：`dist.shasum` = `ab6fff74bed147ab01ca0b251f2c4a10a924e008`，registry 记录
+  `fileCount` 16 / `unpackedSize` 541794；tarball 346608 字节（346.6 kB 打包 / 541.8 kB 解开），
   与本地 `npm pack` 的 SHA-1 完全一致。
   发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。

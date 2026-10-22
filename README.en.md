@@ -165,9 +165,9 @@ upgrade breaks the plugin, please open an issue.
   four wizard screenshots under `docs/`;
   `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
-  broken on the npm page). Measured for 0.2.7: `dist.shasum` = `25946f7ef3d2e87ffcd25ccd302503220b405abd`,
-  registry `fileCount` 16 / `unpackedSize` 540591; the tarball is 346156 bytes (346.2 kB packed /
-  540.6 kB unpacked) and SHA-1-identical to the local `npm pack` output. Release with a
+  broken on the npm page). Measured for 0.2.8: `dist.shasum` = `ab6fff74bed147ab01ca0b251f2c4a10a924e008`,
+  registry `fileCount` 16 / `unpackedSize` 541794; the tarball is 346608 bytes (346.6 kB packed /
+  541.8 kB unpacked) and SHA-1-identical to the local `npm pack` output. Release with a
   token that may publish directly; if the account is required to stage publishes,
   `npm publish` fails with `E_STAGE_REQUIRED` and you need
   `npx npm@11 stage publish` plus `stage approve` (the approval needs 2FA). If the name is
