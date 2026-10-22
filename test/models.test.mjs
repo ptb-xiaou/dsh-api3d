@@ -16,9 +16,16 @@ import {
   Config,
   apply,
   applyImportedModels,
+  activeKeyRef,
+  describeKeys,
   discoverModels,
   importedModels,
+  keyHistoryRefOf,
+  maskKey,
   normalizeModelCatalog,
+  parseKeyHistory,
+  rememberKey,
+  resolveRequestKey,
   routeOfCatalog,
   routeValue,
   withRelayRoute,
@@ -108,6 +115,39 @@ function makeHostCtx({ loader, connection } = {}) {
     },
   }
   return { ctx, effects }
+}
+
+/**
+ * 一个不带凭据服务的宿主上下文：`resolveRequestKey` 只能从请求体里拿密钥。
+ *
+ * 真实宿主里 `ctx.get('credentials')` 总在，但这正是「浏览器读不回密钥」的根源 ——
+ * 密钥清单那几条路径要靠 `makeKeyCtx` 才测得到。
+ */
+const bareCtx = makeHostCtx().ctx
+
+/**
+ * 一个带内存凭据服务的宿主上下文。
+ *
+ * @param {object} [options] - 与 `makeHostCtx` 同款的可选 loader / connection。
+ * @returns {{ctx: object, store: Map<string, string>}} 夹具；`store` 直接改可以伪造现场。
+ */
+function makeKeyCtx(options = {}) {
+  const store = new Map()
+  const credentials = {
+    resolve: async (ref) => (store.has(ref) ? { value: store.get(ref), source: 'file' } : undefined),
+    set: async (ref, value) => {
+      store.set(ref, value)
+      return { ok: true }
+    },
+    unset: async (ref) => {
+      store.delete(ref)
+      return { ok: true }
+    },
+  }
+  const base = makeHostCtx(options)
+  const originalGet = base.ctx.get
+  base.ctx.get = (name) => (name === 'credentials' ? credentials : originalGet(name))
+  return { ctx: base.ctx, store }
 }
 
 test('normalizeModelCatalog 认 OpenAI 形状并保留显示名', () => {
@@ -306,7 +346,7 @@ test('discoverModels 用 Bearer 密钥查站点，返回归一目录与规范化
   await withFetch(
     () => jsonResponse({ data: [{ id: 'deepseek-v4.1-flash', display_name: 'DeepSeek V4.1 Flash' }] }),
     async (calls) => {
-      const result = await discoverModels(config, { apiKey: 'sk-test' })
+      const result = await discoverModels(bareCtx, config, { apiKey: 'sk-test' })
       assert.equal(result.ok, true)
       assert.deepEqual(result.models, [{ id: 'deepseek-v4.1-flash', displayName: 'DeepSeek V4.1 Flash' }])
       assert.equal(result.baseURL, 'https://api3d.cn/v1')
@@ -326,7 +366,7 @@ test('discoverModels 优先用请求里的基础地址，并吃掉尾斜杠', as
   await withFetch(
     () => jsonResponse({ data: [{ id: 'm' }] }),
     async (calls) => {
-      const result = await discoverModels(config, { apiKey: 'k', baseURL: ' https://relay.example.com/api/v1/// ' })
+      const result = await discoverModels(bareCtx, config, { apiKey: 'k', baseURL: ' https://relay.example.com/api/v1/// ' })
       assert.equal(result.ok, true)
       assert.equal(calls[0].url, 'https://relay.example.com/api/v1/models')
       assert.equal(result.baseURL, 'https://relay.example.com/api/v1')
@@ -336,15 +376,15 @@ test('discoverModels 优先用请求里的基础地址，并吃掉尾斜杠', as
 
 test('discoverModels 的失败分类：缺密钥、地址不合法、鉴权失败、HTTP 错误', async () => {
   const config = makeConfig()
-  assert.equal((await discoverModels(config, {})).code, 'missing-key')
-  assert.equal((await discoverModels(config, { apiKey: '   ' })).code, 'missing-key')
-  assert.equal((await discoverModels(config, { apiKey: 'k', baseURL: 'not a url' })).code, 'bad-base-url')
-  assert.equal((await discoverModels(config, { apiKey: 'k', baseURL: 'ftp://relay.example.com/v1' })).code, 'bad-base-url')
+  assert.equal((await discoverModels(bareCtx, config, {})).code, 'missing-key')
+  assert.equal((await discoverModels(bareCtx, config, { apiKey: '   ' })).code, 'missing-key')
+  assert.equal((await discoverModels(bareCtx, config, { apiKey: 'k', baseURL: 'not a url' })).code, 'bad-base-url')
+  assert.equal((await discoverModels(bareCtx, config, { apiKey: 'k', baseURL: 'ftp://relay.example.com/v1' })).code, 'bad-base-url')
 
   await withFetch(
     () => jsonResponse({ error: 'nope' }, 401),
     async () => {
-      const result = await discoverModels(config, { apiKey: 'bad' })
+      const result = await discoverModels(bareCtx, config, { apiKey: 'bad' })
       assert.equal(result.ok, false)
       assert.equal(result.code, 'unauthorized')
       assert.match(result.message, /密钥/)
@@ -354,7 +394,7 @@ test('discoverModels 的失败分类：缺密钥、地址不合法、鉴权失�
   await withFetch(
     () => jsonResponse({}, 500),
     async () => {
-      assert.equal((await discoverModels(config, { apiKey: 'k' })).code, 'http-500')
+      assert.equal((await discoverModels(bareCtx, config, { apiKey: 'k' })).code, 'http-500')
     },
   )
 })
@@ -364,14 +404,14 @@ test('discoverModels 的失败分类：非 JSON、空目录、连不上', async 
   await withFetch(
     () => new Response('<html>oops</html>', { status: 200, headers: { 'content-type': 'text/html' } }),
     async () => {
-      assert.equal((await discoverModels(config, { apiKey: 'k' })).code, 'bad-body')
+      assert.equal((await discoverModels(bareCtx, config, { apiKey: 'k' })).code, 'bad-body')
     },
   )
 
   await withFetch(
     () => jsonResponse({ data: [] }),
     async () => {
-      assert.equal((await discoverModels(config, { apiKey: 'k' })).code, 'empty-catalog')
+      assert.equal((await discoverModels(bareCtx, config, { apiKey: 'k' })).code, 'empty-catalog')
     },
   )
 
@@ -380,7 +420,7 @@ test('discoverModels 的失败分类：非 JSON、空目录、连不上', async 
       throw new TypeError('fetch failed')
     },
     async () => {
-      const result = await discoverModels(config, { apiKey: 'k' })
+      const result = await discoverModels(bareCtx, config, { apiKey: 'k' })
       assert.equal(result.code, 'transport')
       assert.match(result.message, /连不上站点/)
     },
@@ -484,7 +524,7 @@ test('applyImportedModels：配置整条缺失或类型不对时覆盖，而不�
   assert.deepEqual(Object.keys(broken.updates[0].config.providers), [PROVIDER])
 })
 
-test('apply 把两条向导路由注册进 connection 的鉴权围栏', async () => {
+test('apply 把三条向导路由注册进 connection 的鉴权围栏', async () => {
   const config = makeConfig()
   setField(config, 'models', JSON.stringify([{ id: 'picked-model', displayName: 'Picked' }]))
   const { entry, updates } = makeEntry({ providers: {} })
@@ -504,10 +544,10 @@ test('apply 把两条向导路由注册进 connection 的鉴权围栏', async ()
     () => jsonResponse({ data: [{ id: 'live-model', display_name: 'Live Model' }] }),
     async () => {
       apply(ctx, config)
-      assert.equal(routes.length, 2)
+      assert.equal(routes.length, 3)
       assert.deepEqual(
         routes.map((route) => route.path),
-        ['/api/api3d.models', '/api/api3d.apply'],
+        ['/api/api3d.models', '/api/api3d.apply', '/api/api3d.keys'],
       )
       for (const route of routes) {
         assert.deepEqual(route.methods, ['POST'])
@@ -536,6 +576,18 @@ test('apply 把两条向导路由注册进 connection 的鉴权围栏', async ()
         updates[0].config.providers[PROVIDER].models.map((model) => model.id),
         ['picked-model'],
       )
+
+      // 密钥清单：没有凭据服务时也要能答，只是清单为空、活动引用视为未配置。
+      const keysResponse = await routes[2].fetch(
+        new Request('http://127.0.0.1/api/api3d.keys', { method: 'POST' }),
+      )
+      assert.equal(keysResponse.status, 200)
+      assert.deepEqual(await keysResponse.json(), {
+        ok: true,
+        ref: 'API3D_API_KEY',
+        keys: [],
+        active: { configured: false },
+      })
     },
   )
 })
@@ -556,7 +608,7 @@ test('discoverModels 成功时附带向导每行的初值与词汇表', async ()
   await withFetch(
     () => jsonResponse({ data: [{ id: 'm1' }] }),
     async () => {
-      const result = await discoverModels(config, { apiKey: 'sk-test' })
+      const result = await discoverModels(bareCtx, config, { apiKey: 'sk-test' })
       assert.equal(result.ok, true)
       // 站点不报能力时，向导要有一份可以改的起点：能力模板。
       assert.deepEqual(result.defaults.input, MODEL_TEMPLATE.input)
@@ -568,4 +620,168 @@ test('discoverModels 成功时附带向导每行的初值与词汇表', async ()
       assert.deepEqual(result.defaults.modalities, ['text', 'image'])
     },
   )
+})
+
+test('密钥清单只回打码标签，真实值不出宿主进程', async () => {
+  const config = makeConfig()
+  const { ctx, store } = makeKeyCtx()
+  store.set('API3D_API_KEY', 'api3d-1234567890abcdef')
+  store.set('API3D_API_KEY_HISTORY', JSON.stringify(['api3d-oldkey-0011223344', 'api3d-1234567890abcdef']))
+
+  const described = await describeKeys(ctx, config, {})
+  assert.equal(described.ref, 'API3D_API_KEY')
+  assert.deepEqual(
+    described.keys.map((entry) => entry.index),
+    [0, 1],
+  )
+  assert.deepEqual(
+    described.keys.map((entry) => entry.label),
+    ['api3d-…3344', 'api3d-…cdef'],
+  )
+  assert.deepEqual(described.active, { configured: true, label: 'api3d-…cdef' })
+
+  const serialized = JSON.stringify(described)
+  assert.ok(!serialized.includes('1234567890abcdef'), '清单里不该出现完整密钥')
+  assert.ok(!serialized.includes('oldkey'), '历史里的完整密钥也不该出现')
+})
+
+test('describeKeys 的 clear 只清历史，不动活动密钥', async () => {
+  const config = makeConfig()
+  const { ctx, store } = makeKeyCtx()
+  store.set('API3D_API_KEY', 'api3d-active')
+  store.set('API3D_API_KEY_HISTORY', JSON.stringify(['api3d-old']))
+
+  const cleared = await describeKeys(ctx, config, { clear: true })
+  assert.deepEqual(cleared.keys, [])
+  assert.equal(cleared.active.configured, true)
+  assert.equal(store.has('API3D_API_KEY_HISTORY'), false)
+  assert.equal(store.get('API3D_API_KEY'), 'api3d-active')
+})
+
+test('describeKeys 在没有凭据服务时也答得出来', async () => {
+  const config = makeConfig()
+  const result = await describeKeys(bareCtx, config, {})
+  assert.deepEqual(result, { ok: true, ref: 'API3D_API_KEY', keys: [], active: { configured: false } })
+})
+
+test('resolveRequestKey 的优先级：输入的 > 下拉选的 > 已存的 > 报缺失', async () => {
+  const config = makeConfig()
+  const { ctx, store } = makeKeyCtx()
+  store.set('API3D_API_KEY', 'stored-key')
+  store.set('API3D_API_KEY_HISTORY', JSON.stringify(['history-key']))
+
+  assert.deepEqual(await resolveRequestKey(ctx, config, { apiKey: ' typed-key ' }), {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'typed-key',
+    source: 'typed',
+  })
+  assert.deepEqual(await resolveRequestKey(ctx, config, { keyIndex: 0 }), {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'history-key',
+    source: 'history',
+  })
+  assert.deepEqual(await resolveRequestKey(ctx, config, {}), {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'stored-key',
+    source: 'stored',
+  })
+
+  const stale = await resolveRequestKey(ctx, config, { keyIndex: 3 })
+  assert.equal(stale.ok, false)
+  assert.equal(stale.code, 'key-missing')
+
+  const empty = await resolveRequestKey(bareCtx, config, {})
+  assert.equal(empty.ok, false)
+  assert.equal(empty.code, 'missing-key')
+})
+
+test('applyImportedModels 把用户填的密钥落地并记进历史', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1' }]))
+  const { entry, updates } = makeEntry({ providers: {} })
+  const { ctx, store } = makeKeyCtx({ loader: { entries: () => [entry] } })
+
+  const result = await applyImportedModels(ctx, config, undefined, {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'api3d-brand-new-key',
+    source: 'typed',
+  })
+  assert.deepEqual(result, { ok: true, models: ['m1'], keyLabel: 'api3d-…-key' })
+  assert.equal(store.get('API3D_API_KEY'), 'api3d-brand-new-key')
+  assert.deepEqual(parseKeyHistory(store.get('API3D_API_KEY_HISTORY')), ['api3d-brand-new-key'])
+  assert.equal(updates.length, 1)
+})
+
+test('applyImportedModels 从历史里选的那把只落地，不再重复记历史', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1' }]))
+  const { entry } = makeEntry({ providers: {} })
+  const { ctx, store } = makeKeyCtx({ loader: { entries: () => [entry] } })
+  store.set('API3D_API_KEY_HISTORY', JSON.stringify(['api3d-history-one']))
+
+  await applyImportedModels(ctx, config, undefined, {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'api3d-history-one',
+    source: 'history',
+  })
+  assert.equal(store.get('API3D_API_KEY'), 'api3d-history-one')
+  assert.deepEqual(parseKeyHistory(store.get('API3D_API_KEY_HISTORY')), ['api3d-history-one'])
+})
+
+test('applyImportedModels 在没填密钥时照常导入（沿用已存的那把）', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1' }]))
+  const { entry } = makeEntry({ providers: {} })
+  const { ctx, store } = makeKeyCtx({ loader: { entries: () => [entry] } })
+
+  const result = await applyImportedModels(ctx, config, undefined, {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'api3d-stored',
+    source: 'stored',
+  })
+  // 已存的密钥不需要再写一遍，但标签照样回给向导。
+  assert.equal(result.keyLabel, 'ap…ed')
+  assert.equal(store.has('API3D_API_KEY'), false)
+})
+
+test('applyImportedModels 在凭据服务不可写时报错，而不是假装存好了', async () => {
+  const config = makeConfig()
+  setField(config, 'models', JSON.stringify([{ id: 'm1' }]))
+  const { entry } = makeEntry({ providers: {} })
+  const { ctx } = makeHostCtx({ loader: { entries: () => [entry] } })
+
+  const result = await applyImportedModels(ctx, config, undefined, {
+    ok: true,
+    keyRef: 'API3D_API_KEY',
+    value: 'api3d-x',
+    source: 'typed',
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'no-credentials')
+})
+
+test('密钥历史的纯函数边界：打码、解析、去重、引用名', () => {
+  assert.equal(activeKeyRef(makeConfig()), 'API3D_API_KEY')
+  assert.equal(keyHistoryRefOf('API3D_API_KEY'), 'API3D_API_KEY_HISTORY')
+
+  assert.equal(maskKey(''), '')
+  assert.equal(maskKey('   '), '')
+  assert.equal(maskKey('sk-123456'), 'sk…56')
+  assert.equal(maskKey('api3d-1234567890abcdef'), 'api3d-…cdef')
+
+  assert.deepEqual(parseKeyHistory(''), [])
+  assert.deepEqual(parseKeyHistory('not json'), [])
+  assert.deepEqual(parseKeyHistory('{"a":1}'), [])
+  assert.deepEqual(parseKeyHistory('["a",1,"","a","b"]'), ['a', 'b'])
+  assert.equal(parseKeyHistory(JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f'])).length, 5)
+
+  assert.deepEqual(rememberKey(['b', 'a'], 'a'), ['a', 'b'])
+  assert.deepEqual(rememberKey([], '  x  '), ['x'])
+  assert.deepEqual(rememberKey(['a'], ''), ['a'])
 })

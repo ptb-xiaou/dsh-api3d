@@ -337,24 +337,31 @@ test('打码只藏中间：长串留首尾，短串不裸露', () => {
   assert.ok(!exported.maskKey(long).includes('1234567890'), '中间那段不该出现在屏幕上')
 })
 
-test('历史密钥去重限量，坏数据当空历史', () => {
+test('密钥历史的解析与合并搬去了宿主半：浏览器只剩打码', () => {
   const { exported } = loadClient()
-  assert.deepEqual(exported.parseKeyHistory(''), [])
-  assert.deepEqual(exported.parseKeyHistory('not json'), [])
-  assert.deepEqual(exported.parseKeyHistory('{"a":1}'), [])
-  assert.deepEqual(exported.parseKeyHistory('["a",1,"","a","b"]'), ['a', 'b'])
-  assert.equal(exported.parseKeyHistory(JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).length, 5)
-  assert.deepEqual(exported.rememberKey(['b', 'a'], 'a'), ['a', 'b'])
-  assert.deepEqual(exported.rememberKey([], '  x  '), ['x'])
-  assert.deepEqual(exported.rememberKey(['a'], ''), ['a'])
-  assert.equal(exported.keyHistoryRefOf('API3D_API_KEY'), 'API3D_API_KEY_HISTORY')
+  // 凭据 Remote 读不回密钥值，所以「以前用过的密钥」只能由宿主从凭据库取出、
+  // 只把打码标签发回来；浏览器半不再持有解析/合并逻辑（宿主侧另有测试）。
+  assert.equal(exported.parseKeyHistory, undefined)
+  assert.equal(exported.rememberKey, undefined)
+  assert.equal(exported.keyHistoryRefOf, undefined)
+  assert.equal(typeof exported.maskKey, 'function')
 })
 
-test('向导声明了两条宿主路由的字面量路径', () => {
-  // 这两条路径必须与宿主半的 `MODELS_ROUTE` / `APPLY_ROUTE` 逐字一致；浏览器半
-  // 不能 import 宿主包，所以只能靠这条断言防漂移。
+test('选中历史密钥也算「有密钥可用」：确认按钮不能被输入框判空锁死', () => {
+  const { exported } = loadClient()
+  assert.equal(exported.hasKeySource('', undefined), false, '既没输入也没选，应禁用')
+  assert.equal(exported.hasKeySource('   ', undefined), false, '只有空白也算没填')
+  assert.equal(exported.hasKeySource('sk-123', undefined), true, '手填的密钥可用')
+  // 选中历史条目后输入框是空的（真实值只在宿主进程里）——曾经就是这里把按钮锁死。
+  assert.equal(exported.hasKeySource('', { index: 0, label: 'api3d-…63cc' }), true, '选了历史条目就该能提交')
+})
+
+test('向导声明了三条宿主路由的字面量路径', () => {
+  // 这三条路径必须与宿主半的 `MODELS_ROUTE` / `APPLY_ROUTE` / `KEYS_ROUTE` 逐字一致；
+  // 浏览器半不能 import 宿主包，所以只能靠这条断言防漂移。
   assert.ok(source.includes('"/api/api3d.models"'), '缺少模型发现路由')
   assert.ok(source.includes('"/api/api3d.apply"'), '缺少导入应用路由')
+  assert.ok(source.includes('"/api/api3d.keys"'), '缺少密钥清单路由')
   assert.ok(source.includes('function Api3dWizard('), '缺少向导弹窗组件')
 })
 
