@@ -5,16 +5,18 @@
 
 **中文** · [English](README.en.md)
 
-> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.7](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.7](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.7) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
+> 📦 开源仓库：[ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm：[dsh-api3d@0.2.8](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.8](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.8) ｜ MIT（衍生说明见 [NOTICE](NOTICE)）
 
 把 **API3D（[api3d.cn](https://api3d.cn)）** 这条中转站接成 DeepSeek Harness 里的
 一条 pi-ai 路由，基础地址、API Key、出站兼容开关都在「插件」设置页里填，不用改文件、
 不用重装。站点地址已经写在 `lib/site.js` 里，装上就是零配置可用。
 
-**升级不用卸载重装**（0.2.7 起）：插件页 → 本组合包详情页里，「卸载」左边会多一个
+**升级不用卸载重装**（0.2.8 起）：插件页 → 本组合包详情页里，「卸载」左边会多一个
 **「升级到 x.y.z」** 按钮（有新版本时才可点）：点它 → 二次确认 → 进度 → 「已升级到 x.y.z
 · 重启 DSH 之后生效」。宿主半用包管理器把 npm 上更新的版本装进当前 profile；开发目录 /
 `link:` 安装会显示为不可点（附原因）。
+（0.2.7 发布了这条路，但客户端半区漏了槽位注册，真机上没有按钮；0.2.8 补上注册，并加了一条
+断言把「注册项必须存在」钉在测试里。）
 
 这是一个**骨架**：核心链路（路由存活 + 出站围栏 + 凭据写入 + 设置卡 + 密钥/模型向导）
 已经完整可跑，余额 / 用量 / 计费 / 健康探测四项留了明确的接缝，等着填。
@@ -99,9 +101,9 @@ profile 自己的 `llm-pi-ai.providers` 补丁在**每个 bundle 层之后**应�
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.7`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | 已发布 **`dsh-api3d@0.2.8`**；查询顺序：profile 配置的 registry → `registry.npmmirror.com` |
 | **GitHub 直装** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | 仓库里 `lib/` 就是成品，没有构建步骤，装完即用 |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.7.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.8.tgz` | 也接受本地绝对路径的 `.tgz`；GitHub Releases 可以放同一份 tgz |
 | **本地路径** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | 开发用；建议装进隔离实例，别装进正在用的主实例 |
 
 装完**重启 DSH**：插件行是 boot graph 的一部分，热载不生效。
@@ -135,7 +137,7 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 `lib/`（含手写的 `lib/client.js` 与 `lib/route.js`）是**提交进版本库的成品**，
 所以 `github:` 直装不需要任何构建步骤。
 
-- **npm**：已发布 **`dsh-api3d@0.2.7`**（官方 registry 的 `latest`）；`npm pack` 核对打包 16 个文件
+- **npm**：已发布 **`dsh-api3d@0.2.8`**（官方 registry 的 `latest`）；`npm pack` 核对打包 16 个文件
   —— `lib/` 6 个（0.2.7 新增 `lib/self-update.js`）+ `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图；
   `test/`、`scripts/` 由 `files` 白名单挡在外面

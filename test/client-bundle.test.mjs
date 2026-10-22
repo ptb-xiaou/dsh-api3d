@@ -149,6 +149,7 @@ test('apply 注册字典，把设置页挂到三个配置槽位，并加一个�
     'plugins.bundle.config',
     'plugins.row.config',
     'plugins.item',
+    'plugins.detail.actions',
     'sidebar.panellist',
     'main',
     'shell.overlay',
@@ -159,6 +160,15 @@ test('apply 注册字典，把设置页挂到三个配置槽位，并加一个�
   assert.equal(bySlot['plugins.row.config'].key, `${BUNDLE_NAME}#${ROW_ID}`)
   assert.equal(bySlot['plugins.item'].id, exported.SETTINGS_NS)
   assert.equal(bySlot['plugins.item'].order, 30)
+
+  // 「手动更新」按钮：注册进官方插件页声明的详情页页头槽位，排在页面自带的
+  // 开关/「卸载」之前；它**不**依赖注入，也**不**骑 whileServed —— 宿主半没装载时
+  // 用户也该看到按钮（点了会如实报错），所以 served 仍是 3 条。
+  assert.equal(bySlot['plugins.detail.actions'].id, 'dsh-api3d#update')
+  assert.equal(bySlot['plugins.detail.actions'].order, 20)
+  assert.equal(bySlot['plugins.detail.actions'].locale, 'settings.api3d')
+  assert.equal(typeof bySlot['plugins.detail.actions'].inject, 'undefined')
+  assert.equal(bySlot['plugins.detail.actions'].name, 'plugins.detail.actions')
 
   // 三个配置槽位骑在 whileServed 上：宿主半没挂上时不该留下任何痕迹。
   assert.equal(served.length, 3)
@@ -369,7 +379,9 @@ test('每个配置槽位的注册项都带上表单控制器与上下文注入',
   const { exported } = loadClient()
   const { ctx, registrations } = makeClientCtx()
   exported.apply(ctx)
-  const configSlots = registrations.filter((item) => item.options.name.startsWith('plugins.'))
+  const configSlots = registrations.filter((item) =>
+    ['plugins.bundle.config', 'plugins.row.config', 'plugins.item'].includes(item.options.name),
+  )
   assert.equal(configSlots.length, 3)
   for (const { options } of configSlots) {
     assert.equal(options.locale, 'settings.api3d')
@@ -378,6 +390,13 @@ test('每个配置槽位的注册项都带上表单控制器与上下文注入',
     assert.ok(injected.relayForm, '表单控制器没被注入')
     assert.equal(injected.ctx, ctx)
   }
+
+  // 「手动更新」条目挂在 `plugins.detail.actions`（详情页页头的动作区）：它是动作而不是
+  // 表单，所以不注入表单控制器；但同样绑定本插件的字典命名空间。
+  const updateSlot = registrations.find((item) => item.options.name === 'plugins.detail.actions').options
+  assert.equal(updateSlot.locale, 'settings.api3d')
+  assert.equal(updateSlot.id, 'dsh-api3d#update')
+  assert.equal(typeof updateSlot.inject, 'undefined')
 
   const mainInjected = registrations.find((item) => item.options.name === 'main').options.inject()
   assert.equal(typeof mainInjected.t, 'function')
