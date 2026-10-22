@@ -5,12 +5,18 @@
 
 [中文](README.md) · **English**
 
-> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.6](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.6](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.6) ｜ MIT (derivation notes in [NOTICE](NOTICE))
+> 📦 Repository: [ptb-xiaou/dsh-api3d](https://github.com/ptb-xiaou/dsh-api3d) ｜ npm: [dsh-api3d@0.2.7](https://www.npmjs.com/package/dsh-api3d) ｜ [Release v0.2.7](https://github.com/ptb-xiaou/dsh-api3d/releases/tag/v0.2.7) ｜ MIT (derivation notes in [NOTICE](NOTICE))
 
 Wires the **API3D ([api3d.cn](https://api3d.cn))** relay into DeepSeek Harness as one
 pi-ai route. The base URL, the API key and the outbound-compatibility switches all live
 on the plugin's settings card — no file editing, no reinstall. The site address is already
 baked into `lib/site.js`, so it works out of the box.
+
+**No uninstall/reinstall to upgrade** (since 0.2.7): on the Plugins page, the bundle detail
+page gets an **"Upgrade to x.y.z"** button next to "Uninstall" (clickable only when a newer
+version exists): click → confirm → progress → "Upgraded to x.y.z · restart DSH to apply".
+The host half installs the newer npm version into the current profile with the package
+manager; a development directory / `link:` install shows the button disabled with a reason.
 
 This is a **skeleton**: the core path (route survival + outbound fence + credential write +
 settings card + key/model wizard) is complete and runnable. The four ops rows — balance /
@@ -110,9 +116,9 @@ Install into a profile. [中文](README.md)
 
 | Route | Command | Notes |
 | --- | --- | --- |
-| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.6`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
+| **npm** | `dsh plugin --profile web add dsh-api3d` | published as **`dsh-api3d@0.2.7`**; lookup order: the registry configured in the profile, then `registry.npmmirror.com` |
 | **GitHub** | `dsh plugin --profile web add github:ptb-xiaou/dsh-api3d` | `lib/` in the repo is the built artifact — there is no build step, so it runs as installed |
-| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.6.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
+| **tarball** | `dsh plugin --profile web add https://registry.npmjs.org/dsh-api3d/-/dsh-api3d-0.2.7.tgz` | an absolute local `.tgz` path works too; a GitHub Release can carry the same tgz |
 | **local path** | `dsh plugin --profile web add E:\path\to\dsh-api3d` | for development; install into an isolated instance, not into the one you are working in |
 
 **Restart DSH afterwards**: the plugin row is part of the boot graph, so hot reload does
@@ -153,14 +159,14 @@ upgrade breaks the plugin, please open an issue.
 `lib/` (including the hand-written `lib/client.js` and `lib/route.js`) is a
 **committed artifact**, which is why `github:` installs need no build step.
 
-- **npm**: published as **`dsh-api3d@0.2.6`** (`latest` on the official registry); the
-  `dist.shasum` the registry records (`6e3aa743d8…`) matches the SHA-1 of the official
-  tarball downloaded and hashed locally (330153 bytes). `npm pack` was checked to contain
-  exactly 15 files — 5 under `lib/` plus `cordis.patch.yml`, `README.md`, `README.en.md`,
-  `LICENSE`, `NOTICE`, `package.json` and the four wizard screenshots under `docs/`
-  (330.2 kB packed / 492.8 kB unpacked); `test/` and `scripts/` are kept out by the
+- **npm**: published as **`dsh-api3d@0.2.7`** (`latest` on the official registry); `npm pack` was
+  checked to contain exactly 16 files — 6 under `lib/` (0.2.7 adds `lib/self-update.js`) plus
+  `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`, `NOTICE`, `package.json` and the
+  four wizard screenshots under `docs/`;
+  `test/` and `scripts/` are kept out by the
   `files` allowlist (`docs/` joined it in 0.2.1 — otherwise the README screenshots are
-  broken on the npm page). Release with a
+  broken on the npm page). The `dist.shasum` / byte figures are backfilled from the verify
+  step below after each release. Release with a
   token that may publish directly; if the account is required to stage publishes,
   `npm publish` fails with `E_STAGE_REQUIRED` and you need
   `npx npm@11 stage publish` plus `stage approve` (the approval needs 2FA). If the name is

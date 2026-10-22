@@ -544,10 +544,18 @@ test('apply 把三条向导路由注册进 connection 的鉴权围栏', async ()
     () => jsonResponse({ data: [{ id: 'live-model', display_name: 'Live Model' }] }),
     async () => {
       apply(ctx, config)
-      assert.equal(routes.length, 3)
+      assert.equal(routes.length, 6)
       assert.deepEqual(
         routes.map((route) => route.path),
-        ['/api/api3d.models', '/api/api3d.apply', '/api/api3d.keys'],
+        [
+          '/api/api3d.models',
+          '/api/api3d.apply',
+          '/api/api3d.keys',
+          // 「手动更新」三条：与向导三条同一套鉴权围栏与请求体约定
+          '/api/api3d.update-check',
+          '/api/api3d.update',
+          '/api/api3d.update-log',
+        ],
       )
       for (const route of routes) {
         assert.deepEqual(route.methods, ['POST'])

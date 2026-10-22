@@ -1,6 +1,6 @@
 {
   "name": "dsh-api3d",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "把 API3D（api3d.cn）AI API 网关接成 DSH 的一条模型路由：基础地址、API Key 与出站兼容开关都在设置页。API3D (api3d.cn) as a single DeepSeek Harness model route.",
   "keywords": [
     "deepseek-harness",
