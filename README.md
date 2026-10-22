@@ -131,9 +131,9 @@ tarball，一次是 npm 渠道的 `add dsh-api3d`；两次的启动日志都打�
 所以 `github:` 直装不需要任何构建步骤。
 
 - **npm**：已发布 **`dsh-api3d@0.2.5`**（官方 registry 的 `latest`），registry 记录的
-  `dist.shasum`（`761bea55c8…`）与官方 tarball 实际下载并算出的 SHA-1 一致（325526 字节）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
+  `dist.shasum`（`b610c0d1d4…`）与官方 tarball 实际下载并算出的 SHA-1 一致（326308 字节）。`npm pack` 核对只打包 15 个文件 —— `lib/` 5 个 + `cordis.patch.yml` +
   `README.md` + `README.en.md` + `LICENSE` + `NOTICE` + `package.json` + `docs/` 4 张向导截图
-  （325.5 kB 打包 / 477.4 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
+  （326.3 kB 打包 / 479.6 kB 解开）；`test/`、`scripts/` 由 `files` 白名单挡在外面
   （`docs/` 从 0.2.1 起进白名单 —— 否则 npm 页面上的 README 截图是断图）。
   发版用能直接发布的 token；若账号被要求走暂存发布，`npm publish` 会报
   `E_STAGE_REQUIRED`，此时改用 `npx npm@11 stage publish` + `stage approve`（后者需要 2FA）。
